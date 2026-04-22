@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Excel临时文件
+~$*.xlsx
+~$*.xls
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 不需要备份的文件
+# 历史记录中的原始文件可选择性排除
+# history/
+
+# WorkBuddy内部
+.workbuddy/
+
+# Playwright CLI临时文件
+.playwright-cli/
+
+# 日志文件
+*.log

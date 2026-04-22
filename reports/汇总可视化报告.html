@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票交易汇总分析</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+    font-family: 'Microsoft YaHei','SimHei',Arial,sans-serif;
+    background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+    padding: 20px; min-height: 100vh;
+}
+.container {
+    max-width: 1400px; margin: 0 auto; background: #fff;
+    border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden;
+}
+.header {
+    background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+    color: #fff; padding: 30px 40px; display: flex; align-items: center; justify-content: space-between;
+}
+.header h1 { font-size: 28px; font-weight: 600; }
+.header .subtitle { font-size: 14px; opacity: 0.85; margin-top: 4px; }
+.filter-bar {
+    display: flex; align-items: center; gap: 10px; padding: 16px 30px;
+    background: #f0f2f5; border-bottom: 1px solid #e0e0e0; flex-wrap: wrap;
+}
+.filter-bar label { font-size: 14px; color: #555; font-weight: 600; margin-right: 4px; }
+.filter-btn {
+    padding: 6px 16px; border: 1px solid #ccc; border-radius: 20px;
+    background: #fff; color: #555; cursor: pointer; font-size: 13px;
+    transition: all 0.2s;
+}
+.filter-btn:hover { border-color: #667eea; color: #667eea; }
+.filter-btn.active { background: #667eea; color: #fff; border-color: #667eea; }
+.custom-date {
+    display: none; align-items: center; gap: 6px;
+}
+.custom-date.show { display: flex; }
+.custom-date input {
+    padding: 5px 10px; border: 1px solid #ccc; border-radius: 6px;
+    font-size: 13px; outline: none;
+}
+.custom-date input:focus { border-color: #667eea; }
+.custom-date button {
+    padding: 5px 14px; background: #667eea; color: #fff; border: none;
+    border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.breadcrumb {
+    padding: 12px 30px; background: #fafbfc; border-bottom: 1px solid #eee;
+    display: flex; align-items: center; gap: 8px; font-size: 14px;
+}
+.breadcrumb span { color: #999; cursor: pointer; }
+.breadcrumb span:hover { color: #667eea; }
+.breadcrumb span.current { color: #333; font-weight: 600; cursor: default; }
+.breadcrumb .sep { color: #ccc; }
+.stats-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; padding: 24px 30px; background: #f8f9fa;
+}
+.stat-card {
+    background: #fff; padding: 20px; border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08); text-align: center;
+}
+.stat-card .label { color: #888; font-size: 13px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+.stat-card .value { font-size: 24px; font-weight: bold; }
+.stat-card .value.profit { color: #e74c3c; }
+.stat-card .value.loss { color: #27ae60; }
+.stat-card .value.neutral { color: #3498db; }
+.charts-area { padding: 24px 30px; }
+.chart-section { margin-bottom: 32px; }
+.chart-title {
+    font-size: 20px; color: #2c3e50; margin-bottom: 14px;
+    padding-left: 12px; border-left: 4px solid #667eea;
+}
+.chart-wrap { width: 100%; height: 420px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.two-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.two-charts .chart-wrap { height: 380px; }
+.detail-section { padding: 0 30px 30px; }
+.detail-table {
+    width: 100%; border-collapse: collapse; font-size: 14px;
+    border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.detail-table thead { background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); }
+.detail-table th { color: #fff; padding: 12px 8px; text-align: center; font-size: 13px; }
+.detail-table td { padding: 10px 8px; text-align: center; border-bottom: 1px solid #f0f0f0; }
+.detail-table tbody tr:hover { background: #f8f9fa; }
+.detail-table .profit-cell { color: #e74c3c; font-weight: 600; }
+.detail-table .loss-cell { color: #27ae60; font-weight: 600; }
+.empty-state { text-align: center; padding: 60px 20px; color: #aaa; font-size: 16px; }
+.footer {
+    padding: 16px; text-align: center; color: #999; font-size: 13px;
+    background: #f8f9fa; border-top: 1px solid #eee;
+}
+@media (max-width: 768px) {
+    .two-charts { grid-template-columns: 1fr; }
+    .header { flex-direction: column; gap: 10px; text-align: center; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .filter-bar { justify-content: center; }
+}
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div>
+            <h1>📊 股票交易汇总分析</h1>
+            <div class="subtitle">点击图表数据项可钻取下级明细</div>
+        </div>
+    </div>
+    <div class="filter-bar">
+        <label>时间范围：</label>
+        <button class="filter-btn active" data-type="mtd" onclick="setFilter('mtd')">本月</button>
+        <button class="filter-btn" data-type="ytd" onclick="setFilter('ytd')">本年</button>
+        <button class="filter-btn" data-type="all" onclick="setFilter('all')">全部</button>
+        <button class="filter-btn" data-type="custom" onclick="setFilter('custom')">自定义</button>
+        <div class="custom-date" id="customDate">
+            <input type="date" id="startDate" onchange="applyCustomFilter()">
+            <span style="color:#aaa">至</span>
+            <input type="date" id="endDate" onchange="applyCustomFilter()">
+            <button onclick="applyCustomFilter()">确定</button>
+        </div>
+    </div>
+    <div class="breadcrumb" id="breadcrumb"></div>
+    <div class="stats-grid" id="statsGrid"></div>
+    <div class="charts-area" id="chartsArea"></div>
+    <div class="detail-section" id="detailSection"></div>
+    <div class="footer">
+        <p>报告生成时间：2026-04-22 16:58:04 | 数据来源：股票交易盈亏汇总.xlsx</p>
+    </div>
+</div>
+<script>
+const ALL_DATA = [{"date": "2026-04-10", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 354.755, "sellPrice": 357.99, "buyAmount": 70951.0, "sellAmount": 71598.0, "profit": 647.0, "profitPct": "0.91%"}, {"date": "2026-04-10", "source": "两融账户", "code": "688025", "name": "杰普特", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 268.21, "sellPrice": 273.73, "buyAmount": 53642.0, "sellAmount": 54746.0, "profit": 1104.0, "profitPct": "2.06%"}, {"date": "2026-04-10", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 232.67, "sellPrice": 235.38, "buyAmount": 46534.0, "sellAmount": 47076.0, "profit": 542.0, "profitPct": "1.16%"}, {"date": "2026-04-14", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 89.89, "sellPrice": 90.49, "buyAmount": 17978.0, "sellAmount": 18098.0, "profit": 120.0, "profitPct": "0.67%"}, {"date": "2026-04-14", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 300, "sellQty": 200, "matchQty": 200, "buyPrice": 346.9633, "sellPrice": 349.99, "buyAmount": 69392.67, "sellAmount": 69998.0, "profit": 605.33, "profitPct": "0.87%"}, {"date": "2026-04-16", "source": "两融账户", "code": "300014", "name": "亿纬锂能", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 70.89, "sellPrice": 72.23, "buyAmount": 7089.0, "sellAmount": 7223.0, "profit": 134.0, "profitPct": "1.89%"}, {"date": "2026-04-16", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 200, "sellQty": 400, "matchQty": 200, "buyPrice": 95.34, "sellPrice": 96.175, "buyAmount": 19068.0, "sellAmount": 19235.0, "profit": 167.0, "profitPct": "0.88%"}, {"date": "2026-04-16", "source": "两融账户", "code": "688025", "name": "杰普特", "buyQty": 112, "sellQty": 200, "matchQty": 112, "buyPrice": 273.36, "sellPrice": 274.96, "buyAmount": 30616.32, "sellAmount": 30795.52, "profit": 179.2, "profitPct": "0.59%"}, {"date": "2026-04-17", "source": "两融账户", "code": "300750", "name": "宁德时代", "buyQty": 200, "sellQty": 100, "matchQty": 100, "buyPrice": 444.035, "sellPrice": 447.56, "buyAmount": 44403.5, "sellAmount": 44756.0, "profit": 352.5, "profitPct": "0.79%"}, {"date": "2026-04-17", "source": "两融账户", "code": "2222", "name": "福晶科技", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 87.83, "sellPrice": 89.85, "buyAmount": 8783.0, "sellAmount": 8985.0, "profit": 202.0, "profitPct": "2.30%"}, {"date": "2026-04-17", "source": "两融账户", "code": "603920", "name": "世运电路", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 57.89, "sellPrice": 58.97, "buyAmount": 11578.0, "sellAmount": 11794.0, "profit": 216.0, "profitPct": "1.87%"}, {"date": "2026-04-17", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 373.84, "sellPrice": 376.97, "buyAmount": 37384.0, "sellAmount": 37697.0, "profit": 313.0, "profitPct": "0.84%"}, {"date": "2026-04-17", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 264.18, "sellPrice": 267.09, "buyAmount": 52836.0, "sellAmount": 53418.0, "profit": 582.0, "profitPct": "1.10%"}, {"date": "2026-04-20", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 400, "sellQty": 200, "matchQty": 200, "buyPrice": 264.6404, "sellPrice": 261.78, "buyAmount": 52928.08, "sellAmount": 52356.0, "profit": -572.08, "profitPct": "-1.08%"}, {"date": "2026-04-21", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 400, "sellQty": 400, "matchQty": 400, "buyPrice": 355.52, "sellPrice": 359.0025, "buyAmount": 142208.0, "sellAmount": 143601.0, "profit": 1393.0, "profitPct": "0.98%"}, {"date": "2026-04-21", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 250.9, "sellPrice": 252.55, "buyAmount": 50180.0, "sellAmount": 50510.0, "profit": 330.0, "profitPct": "0.66%"}, {"date": "2026-04-21", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 97.07, "sellPrice": 97.6, "buyAmount": 19414.0, "sellAmount": 19520.0, "profit": 106.0, "profitPct": "0.55%"}, {"date": "2026-04-21", "source": "两融账户", "code": "300054", "name": "鼎龙股份", "buyQty": 500, "sellQty": 500, "matchQty": 500, "buyPrice": 51.76, "sellPrice": 52.56, "buyAmount": 25880.0, "sellAmount": 26280.0, "profit": 400.0, "profitPct": "1.55%"}, {"date": "2026-04-22", "source": "两融账户", "code": "2594", "name": "比亚迪", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 101.09, "sellPrice": 101.49, "buyAmount": 10109.0, "sellAmount": 10149.0, "profit": 40.0, "profitPct": "0.40%"}, {"date": "2026-04-22", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 400, "sellQty": 200, "matchQty": 200, "buyPrice": 96.26, "sellPrice": 99.33, "buyAmount": 19252.0, "sellAmount": 19866.0, "profit": 614.0, "profitPct": "3.19%"}, {"date": "2026-04-22", "source": "手机账户", "code": "300502", "name": "新易盛", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 584.335, "sellPrice": 605.245, "buyAmount": 116867.0, "sellAmount": 121049.0, "profit": 4182.0, "profitPct": "3.58%"}, {"date": "2026-04-22", "source": "手机账户", "code": "688025", "name": "杰普特", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 331.27, "sellPrice": 335.88, "buyAmount": 66254.0, "sellAmount": 67176.0, "profit": 922.0, "profitPct": "1.39%"}];
+const NOW = '2026-04-22';
+let state = { view: 'overview', filterType: 'mtd', customStart: '', customEnd: '', drillParam: null };
+let navStack = [];
+const chartMap = {};
+function fmtMoney(n, sign) {
+    const s = n >= 0 ? (sign ? '+' : '') : '';
+    return s + '¥' + Math.abs(n).toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function fmtPct(n, sign) {
+    const s = n >= 0 ? (sign ? '+' : '') : '';
+    return s + n.toFixed(2) + '%';
+}
+function profitColor(v) { return v >= 0 ? '#e74c3c' : '#27ae60'; }
+function profitCls(v) { return v >= 0 ? 'profit' : 'loss'; }
+function groupBy(arr, keyFn) {
+    const getKey = typeof keyFn === 'function' ? keyFn : r => r[keyFn];
+    const m = {};
+    arr.forEach(r => { const k = getKey(r); if (!m[k]) m[k] = []; m[k].push(r); });
+    return m;
+}
+function sumField(arr, f) { return arr.reduce((s,r) => s + (typeof f === 'function' ? f(r) : r[f]), 0); }
+function unique(arr, f) { const fn = typeof f === 'function' ? f : r => r[f]; return [...new Set(arr.map(fn))]; }
+function disposeAll() {
+    Object.values(chartMap).forEach(c => { try { c.dispose(); } catch(e){} });
+    Object.keys(chartMap).forEach(k => delete chartMap[k]);
+}
+function mkChart(id) {
+    const dom = document.getElementById(id);
+    if (!dom) return null;
+    const c = echarts.init(dom);
+    chartMap[id] = c;
+    return c;
+}
+function getFilteredRecords() {
+    let recs = [...ALL_DATA];
+    if (state.filterType === 'mtd') {
+        const m = NOW.substring(0,7);
+        recs = recs.filter(r => r.date.startsWith(m));
+    } else if (state.filterType === 'ytd') {
+        const y = NOW.substring(0,4);
+        recs = recs.filter(r => r.date.startsWith(y));
+    } else if (state.filterType === 'custom' && state.customStart && state.customEnd) {
+        recs = recs.filter(r => r.date >= state.customStart && r.date <= state.customEnd);
+    }
+    return recs;
+}
+function setFilter(type) {
+    state.filterType = type;
+    document.querySelectorAll('.filter-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.type === type);
+    });
+    document.getElementById('customDate').classList.toggle('show', type === 'custom');
+    if (type !== 'custom') {
+        state.view = 'overview'; state.drillParam = null; navStack = [];
+    }
+    render();
+}
+function applyCustomFilter() {
+    state.customStart = document.getElementById('startDate').value;
+    state.customEnd = document.getElementById('endDate').value;
+    if (state.customStart && state.customEnd) {
+        state.view = 'overview'; state.drillParam = null; navStack = []; render();
+    }
+}
+function drillTo(view, param) {
+    navStack.push({view: state.view, param: state.drillParam});
+    state.view = view; state.drillParam = param; render();
+    window.scrollTo({top: 0, behavior: 'smooth'});
+}
+function goBack() {
+    if (navStack.length === 0) return;
+    const prev = navStack.pop();
+    state.view = prev.view; state.drillParam = prev.param; render();
+    window.scrollTo({top: 0, behavior: 'smooth'});
+}
+function renderBreadcrumb() {
+    const el = document.getElementById('breadcrumb');
+    let html = '<span onclick="goBackOverview()">汇总概览</span>';
+    if (state.view === 'month') {
+        html += '<span class="sep">›</span><span class="current">' + state.drillParam + ' 月度明细</span>';
+    } else if (state.view === 'day') {
+        html += '<span class="sep">›</span><span onclick="goBackToMonthFromDay()">月度</span><span class="sep">›</span><span class="current">' + state.drillParam + ' 日度明细</span>';
+    } else if (state.view === 'stock') {
+        html += '<span class="sep">›</span><span class="current">' + state.drillParam + ' 个股分析</span>';
+    }
+    el.innerHTML = html;
+}
+function goBackOverview() { state.view = 'overview'; state.drillParam = null; navStack = []; render(); }
+function goBackToMonthFromDay() {
+    const month = state.drillParam ? state.drillParam.substring(0,7) : NOW.substring(0,7);
+    state.view = 'month'; state.drillParam = month; render();
+}
+function renderStats(cards) {
+    const el = document.getElementById('statsGrid');
+    el.innerHTML = cards.map(c => '<div class="stat-card"><div class="label">' + c.label + '</div><div class="value ' + c.cls + '">' + c.value + '</div></div>').join('');
+}
+function computeStats(recs) {
+    const tp = sumField(recs, 'profit');
+    const tb = sumField(recs, 'buyAmount');
+    const ts = sumField(recs, 'sellAmount');
+    const tr = tb > 0 ? tp / tb * 100 : 0;
+    const dates = unique(recs, 'date');
+    const stocks = unique(recs, 'name');
+    const winCount = recs.filter(r => r.profit > 0).length;
+    const loseCount = recs.filter(r => r.profit < 0).length;
+    return [
+        {label:'交易天数', value:dates.length, cls:'neutral'},
+        {label:'交易笔数', value:recs.length, cls:'neutral'},
+        {label:'涉及股票', value:stocks.length, cls:'neutral'},
+        {label:'盈利笔数', value:winCount, cls:'profit'},
+        {label:'亏损笔数', value:loseCount, cls:'loss'},
+        {label:'胜率', value: recs.length > 0 ? (winCount/recs.length*100).toFixed(1)+'%' : 'N/A', cls:'neutral'},
+        {label:'总买入金额', value: fmtMoney(tb), cls:'neutral'},
+        {label:'总卖出金额', value: fmtMoney(ts), cls:'neutral'},
+        {label:'总盈亏', value: fmtMoney(tp,true), cls: profitCls(tp)},
+        {label:'总收益率', value: fmtPct(tr,true), cls: profitCls(tr)},
+    ];
+}
+function renderDetailTable(recs, title) {
+    const el = document.getElementById('detailSection');
+    if (recs.length === 0) { el.innerHTML = ''; return; }
+    el.innerHTML = '<h2 class="chart-title" style="margin-bottom:14px">' + title + '</h2>' +
+        '<table class="detail-table"><thead><tr><th>日期</th><th>来源</th><th>证券名称</th><th>匹配数量</th><th>买入均价</th><th>卖出均价</th><th>买入金额</th><th>卖出金额</th><th>盈亏金额</th><th>盈亏比例</th></tr></thead><tbody>' +
+        recs.map(r => {
+            const pc = r.profit >= 0 ? 'profit-cell' : 'loss-cell';
+            return '<tr><td>' + r.date + '</td><td>' + r.source + '</td><td><b>' + r.name + '</b></td><td>' + r.matchQty + '</td><td>¥' + r.buyPrice.toFixed(4) + '</td><td>¥' + r.sellPrice.toFixed(4) + '</td><td>' + fmtMoney(r.buyAmount) + '</td><td>' + fmtMoney(r.sellAmount) + '</td><td class="' + pc + '">' + fmtMoney(r.profit,true) + '</td><td class="' + pc + '">' + r.profitPct + '</td></tr>';
+        }).join('') + '</tbody></table>';
+}
+function renderOverview() {
+    const recs = getFilteredRecords();
+    if (recs.length === 0) {
+        disposeAll(); renderBreadcrumb();
+        document.getElementById('statsGrid').innerHTML = '';
+        document.getElementById('chartsArea').innerHTML = '<div class="empty-state">当前筛选条件下暂无数据</div>';
+        document.getElementById('detailSection').innerHTML = '';
+        return;
+    }
+    renderStats(computeStats(recs));
+    const monthGroups = groupBy(recs, r => r.date.substring(0,7));
+    const months = Object.keys(monthGroups).sort();
+    const monthProfits = months.map(m => Math.round(sumField(monthGroups[m],'profit')*100)/100);
+    const dayGroups = groupBy(recs, 'date');
+    const days = Object.keys(dayGroups).sort();
+    const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
+    let cumulative = [], run = 0;
+    dayProfits.forEach(p => { run += p; cumulative.push(Math.round(run*100)/100); });
+    const stockGroups = groupBy(recs, 'name');
+    const stockList = Object.keys(stockGroups).map(n => ({
+        name: n, profit: Math.round(sumField(stockGroups[n],'profit')*100)/100,
+        count: stockGroups[n].length
+    })).sort((a,b) => b.profit - a.profit);
+    const chartsArea = document.getElementById('chartsArea');
+    chartsArea.innerHTML = `
+        <div class="chart-section"><h2 class="chart-title">📈 月度盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取月度明细）</span></h2><div id="chartMonth" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">📅 每日盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取日度明细）</span></h2><div id="chartDaily" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">💰 累计收益曲线</h2><div id="chartCumulative" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏分析 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体/饼块查看个股明细）</span></h2><div class="two-charts"><div id="chartStockBar" class="chart-wrap"></div><div id="chartStockPie" class="chart-wrap"></div></div></div>`;
+    document.getElementById('detailSection').innerHTML = '';
+    const mc = mkChart('chartMonth');
+    mc.setOption({
+        tooltip: { trigger:'axis', formatter: p => p[0].name+'月<br/>盈亏：'+fmtMoney(p[0].value,true) },
+        xAxis: { type:'category', data: months.map(m => m+'月'), axisLabel:{color:'#555'} },
+        yAxis: { type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
+        series: [{ type:'bar', data: monthProfits, itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 } }]
+    });
+    mc.on('click', p => drillTo('month', p.name.replace('月','')));
+    const dc = mkChart('chartDaily');
+    dc.setOption({
+        tooltip: { trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) },
+        xAxis: { type:'category', data: days, axisLabel:{color:'#555', rotate:45} },
+        yAxis: { type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
+        series: [{ type:'bar', data: dayProfits, itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 } }]
+    });
+    dc.on('click', p => drillTo('day', p.name));
+    const cc = mkChart('chartCumulative');
+    const maxCum = Math.max(...cumulative), minCum = Math.min(...cumulative);
+    let markPts = [];
+    if (cumulative.length > 0) {
+        markPts.push({type:'max', name:'最高 ¥'+maxCum.toFixed(0)});
+        markPts.push({type:'min', name:'最低 ¥'+minCum.toFixed(0)});
+    }
+    cc.setOption({
+        tooltip: { trigger:'axis', formatter: p => p[0].name+'<br/>累计：'+fmtMoney(p[0].value,true) },
+        xAxis: { type:'category', data: days, axisLabel:{color:'#555', rotate:45} },
+        yAxis: { type:'value', name:'累计收益（元）', axisLabel:{formatter:'¥{value}'} },
+        series: [{ type:'line', data: cumulative, smooth:true, itemStyle:{ color:'#667eea' }, areaStyle:{ color:{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(102,126,234,0.35)'},{offset:1,color:'rgba(102,126,234,0.02)'}]}}, markPoint:{ data: markPts }, markLine:{ data:[{type:'average',name:'平均'}] } }]
+    });
+    const sb = mkChart('chartStockBar');
+    sb.setOption({
+        tooltip: { trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) },
+        grid: { left:'3%', right:'4%', bottom:'15%', containLabel:true },
+        xAxis: { type:'category', data: stockList.map(s=>s.name), axisLabel:{color:'#555', rotate:30} },
+        yAxis: { type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
+        series: [{ type:'bar', data: stockList.map(s=>s.profit), itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:10 } }]
+    });
+    sb.on('click', p => drillTo('stock', p.name));
+    const sp = mkChart('chartStockPie');
+    const pieData = stockList.filter(s => s.profit > 0).map(s => ({name:s.name, value:s.profit}));
+    const loseData = stockList.filter(s => s.profit < 0);
+    if (loseData.length > 0) {
+        pieData.push({name:'亏损合计', value: Math.abs(loseData.reduce((s,x)=>s+x.profit,0)), itemStyle:{color:'#27ae60'}});
+    }
+    sp.setOption({
+        tooltip:{ trigger:'item', formatter:'{b}<br/>¥{c} ({d}%)' },
+        series:[{ type:'pie', radius:['35%','65%'], center:['50%','55%'], itemStyle:{ borderRadius:8, borderColor:'#fff', borderWidth:2 }, label:{ show:true, formatter:'{b}\n¥{c}' }, emphasis:{ label:{ show:true, fontSize:14, fontWeight:'bold' } }, data: pieData }]
+    });
+    sp.on('click', p => { if (p.name === '亏损合计') return; drillTo('stock', p.name); });
+}
+function renderMonthView() {
+    const allFiltered = getFilteredRecords();
+    const month = state.drillParam;
+    const recs = allFiltered.filter(r => r.date.startsWith(month));
+    if (recs.length === 0) { goBackOverview(); return; }
+    const monthProfit = sumField(recs, 'profit');
+    const monthBuy = sumField(recs, 'buyAmount');
+    const monthDays = unique(recs, 'date');
+    const monthStocks = unique(recs, 'name');
+    renderStats([
+        {label:'月份', value: month, cls:'neutral'},
+        {label:'交易天数', value: monthDays.length, cls:'neutral'},
+        {label:'交易笔数', value: recs.length, cls:'neutral'},
+        {label:'涉及股票', value: monthStocks.length, cls:'neutral'},
+        {label:'月度盈亏', value: fmtMoney(monthProfit,true), cls: profitCls(monthProfit)},
+        {label:'月度收益率', value: fmtPct(monthBuy>0?monthProfit/monthBuy*100:0,true), cls: profitCls(monthProfit)},
+    ]);
+    const dayGroups = groupBy(recs, 'date');
+    const days = Object.keys(dayGroups).sort();
+    const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
+    let cum = [], run = 0;
+    dayProfits.forEach(p => { run += p; cum.push(Math.round(run*100)/100); });
+    const chartsArea = document.getElementById('chartsArea');
+    chartsArea.innerHTML = `
+        <div class="chart-section"><h2 class="chart-title">📅 ${month} 每日盈亏 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看当日明细）</span></h2><div id="chartMonthDaily" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">💰 ${month} 月内累计收益</h2><div id="chartMonthCum" class="chart-wrap"></div></div>`;
+    const dc = mkChart('chartMonthDaily');
+    dc.setOption({
+        tooltip:{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) },
+        xAxis:{ type:'category', data: days.map(d=>d.substring(8)), axisLabel:{color:'#555'} },
+        yAxis:{ type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
+        series:[{ type:'bar', data: dayProfits, itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 } }]
+    });
+    dc.on('click', p => drillTo('day', month + '-' + p.name));
+    const ccc = mkChart('chartMonthCum');
+    ccc.setOption({
+        tooltip:{ trigger:'axis', formatter: p => p[0].name+'<br/>累计：'+fmtMoney(p[0].value,true) },
+        xAxis:{ type:'category', data: days.map(d=>d.substring(8)), axisLabel:{color:'#555'} },
+        yAxis:{ type:'value', name:'累计收益（元）', axisLabel:{formatter:'¥{value}'} },
+        series:[{ type:'line', data: cum, smooth:true, itemStyle:{ color:'#667eea' }, areaStyle:{ color:{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(102,126,234,0.3)'},{offset:1,color:'rgba(102,126,234,0.02)'}]}}, markPoint:{ data:[{type:'max',name:'最高'},{type:'min',name:'最低'}] } }]
+    });
+    renderDetailTable(recs, '📋 ' + month + ' 全部交易明细');
+}
+function renderDayView() {
+    const allFiltered = getFilteredRecords();
+    const date = state.drillParam;
+    const recs = allFiltered.filter(r => r.date === date);
+    if (recs.length === 0) { goBack(); return; }
+    const dayProfit = sumField(recs, 'profit');
+    const dayBuy = sumField(recs, 'buyAmount');
+    const dayRate = dayBuy > 0 ? dayProfit / dayBuy * 100 : 0;
+    const winCount = recs.filter(r => r.profit > 0).length;
+    renderStats([
+        {label:'日期', value: date, cls:'neutral'},
+        {label:'交易笔数', value: recs.length, cls:'neutral'},
+        {label:'盈利笔数', value: winCount, cls:'profit'},
+        {label:'亏损笔数', value: recs.length - winCount, cls:'loss'},
+        {label:'当日盈亏', value: fmtMoney(dayProfit,true), cls: profitCls(dayProfit)},
+        {label:'当日收益率', value: fmtPct(dayRate,true), cls: profitCls(dayRate)},
+    ]);
+    const sorted = [...recs].sort((a,b) => b.profit - a.profit);
+    const chartsArea = document.getElementById('chartsArea');
+    chartsArea.innerHTML = `<div class="chart-section"><h2 class="chart-title">📊 ${date} 各股票盈亏</h2><div id="chartDayStock" class="chart-wrap" style="height:350px"></div></div>`;
+    const sc = mkChart('chartDayStock');
+    sc.setOption({
+        tooltip:{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) },
+        grid:{ left:'3%', right:'4%', bottom:'10%', containLabel:true },
+        xAxis:{ type:'category', data: sorted.map(r=>r.name), axisLabel:{color:'#555', rotate:20} },
+        yAxis:{ type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
+        series:[{ type:'bar', data: sorted.map(r=>r.profit), itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:12 } }]
+    });
+    renderDetailTable(recs, '📋 ' + date + ' 交易明细');
+}
+function renderStockView() {
+    const allFiltered = getFilteredRecords();
+    const stockName = state.drillParam;
+    const recs = allFiltered.filter(r => r.name === stockName);
+    if (recs.length === 0) { goBack(); return; }
+    const totalProfit = sumField(recs, 'profit');
+    const totalBuy = sumField(recs, 'buyAmount');
+    const totalRate = totalBuy > 0 ? totalProfit / totalBuy * 100 : 0;
+    const tradeDays = unique(recs, 'date');
+    const winCount = recs.filter(r => r.profit > 0).length;
+    renderStats([
+        {label:'股票名称', value: stockName, cls:'neutral'},
+        {label:'证券代码', value: recs[0].code, cls:'neutral'},
+        {label:'交易次数', value: recs.length, cls:'neutral'},
+        {label:'交易天数', value: tradeDays.length, cls:'neutral'},
+        {label:'盈利次数', value: winCount, cls:'profit'},
+        {label:'总盈亏', value: fmtMoney(totalProfit,true), cls: profitCls(totalProfit)},
+        {label:'总收益率', value: fmtPct(totalRate,true), cls: profitCls(totalRate)},
+        {label:'平均每次盈亏', value: fmtMoney(totalProfit/recs.length,true), cls: profitCls(totalProfit)},
+    ]);
+    const dayGroups = groupBy(recs, 'date');
+    const days = Object.keys(dayGroups).sort();
+    const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
+    let cum = [], run = 0;
+    dayProfits.forEach(p => { run += p; cum.push(Math.round(run*100)/100); });
+    const chartsArea = document.getElementById('chartsArea');
+    const singleDay = days.length === 1;
+    if (singleDay) {
+        chartsArea.innerHTML = `<div class="chart-section"><h2 class="chart-title">📊 ${stockName} 盈亏分布</h2><div id="chartStockSingle" class="chart-wrap" style="height:300px"></div></div>`;
+        const sc = mkChart('chartStockSingle');
+        sc.setOption({
+            tooltip:{ trigger:'item', formatter:'{b}<br/>¥{c}' },
+            series:[{ type:'pie', radius:['40%','65%'], data: recs.map(r => ({ name: r.date, value: r.profit, itemStyle:{ color: profitColor(r.profit) } })), label:{ formatter:'{b}\n{c}' } }]
+        });
+    } else {
+        chartsArea.innerHTML = `
+            <div class="chart-section"><h2 class="chart-title">📅 ${stockName} 每日盈亏 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看当日明细）</span></h2><div id="chartStockDaily" class="chart-wrap"></div></div>
+            <div class="chart-section"><h2 class="chart-title">💰 ${stockName} 累计收益曲线</h2><div id="chartStockCum" class="chart-wrap"></div></div>`;
+        const dc = mkChart('chartStockDaily');
+        dc.setOption({
+            tooltip:{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) },
+            xAxis:{ type:'category', data: days, axisLabel:{color:'#555', rotate:45} },
+            yAxis:{ type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
+            series:[{ type:'bar', data: dayProfits, itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 } }]
+        });
+        dc.on('click', p => drillTo('day', p.name));
+        const cc = mkChart('chartStockCum');
+        cc.setOption({
+            tooltip:{ trigger:'axis', formatter: p => p[0].name+'<br/>累计：'+fmtMoney(p[0].value,true) },
+            xAxis:{ type:'category', data: days, axisLabel:{color:'#555', rotate:45} },
+            yAxis:{ type:'value', name:'累计收益（元）', axisLabel:{formatter:'¥{value}'} },
+            series:[{ type:'line', data: cum, smooth:true, itemStyle:{ color:'#667eea' }, areaStyle:{ color:{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(102,126,234,0.3)'},{offset:1,color:'rgba(102,126,234,0.02)'}]}}, markPoint:{ data:[{type:'max',name:'最高'},{type:'min',name:'最低'}] } }]
+        });
+    }
+    renderDetailTable(recs, '📋 ' + stockName + ' 全部交易记录');
+}
+function render() {
+    disposeAll(); renderBreadcrumb();
+    switch (state.view) {
+        case 'overview': renderOverview(); break;
+        case 'month':   renderMonthView(); break;
+        case 'day':     renderDayView(); break;
+        case 'stock':   renderStockView(); break;
+    }
+}
+window.addEventListener('resize', () => {
+    Object.values(chartMap).forEach(c => { try { c.resize(); } catch(e){} });
+});
+render();
+</script>
+</body>
+</html>
