@@ -23,8 +23,10 @@ Thumbs.db
 # 历史记录中的原始文件可选择性排除
 # history/
 
-# WorkBuddy内部
-.workbuddy/
+# WorkBuddy内部（保留skills用于同步，忽略其他）
+.workbuddy/memory/
+.workbuddy/automations/
+.workbuddy/*.md
 
 # Playwright CLI临时文件
 .playwright-cli/

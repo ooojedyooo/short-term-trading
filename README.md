@@ -125,6 +125,50 @@ python "股票交易分析系统.py"
 - ECharts：数据可视化图表库
 - Bootstrap风格：HTML样式
 
+## 🔄 多电脑同步 & Skill 安装
+
+本项目已配置 WorkBuddy Skill，支持在多台电脑上同步使用。
+
+### 同步文件结构
+
+```
+d:\短线收益\
+├── .workbuddy\skills\短线收益\          # WorkBuddy Skill（已同步到Git）
+│   ├── SKILL.md
+│   └── scripts\analyze_trading.py
+├── 股票交易分析系统.py
+├── ...
+```
+
+### 在新电脑上启用 Skill
+
+1. **克隆仓库**（或拉取最新代码）：
+   ```bash
+   git clone https://github.com/ooojedyooo/short-term-trading.git
+   cd short-term-trading
+   ```
+
+2. **安装 Skill 到 WorkBuddy**：
+   将项目中的 skill 文件夹复制到 WorkBuddy 的 skills 目录：
+   ```bash
+   # Windows
+   xcopy /E /I ".workbuddy\skills\短线收益" "%USERPROFILE%\.workbuddy\skills\短线收益"
+   ```
+
+3. **重启 WorkBuddy** 或重新加载技能即可使用。
+
+### Skill 触发词
+
+安装后，可以直接对 WorkBuddy 说：
+- "分析短线收益"
+- "处理交易记录"
+- "股票盈亏分析"
+- "生成投资报告"
+
+WorkBuddy 将自动调用本项目的分析能力。
+
+---
+
 ## 💡 注意事项
 
 1. **文件格式**：确保Excel文件包含标准列名（证券代码、证券名称、买卖类别、成交数量、成交价格、成交金额）
@@ -132,6 +176,7 @@ python "股票交易分析系统.py"
 3. **数据备份**：系统会自动归档原始文件，但建议定期备份 `股票交易盈亏汇总.xlsx`
 4. **去重机制**：如果同一日期的数据已存在，系统会自动删除旧数据并重新生成
 5. **可视化报告**：汇总可视化报告会在每次处理文件后自动更新，无需手动生成
+6. **Skill 同步**：修改 skill 后，记得提交并推送，另一台电脑拉取后即可同步
 
 ## 📞 技术支持
 
