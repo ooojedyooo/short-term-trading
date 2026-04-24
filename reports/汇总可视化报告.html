@@ -127,12 +127,12 @@ body {
     <div class="charts-area" id="chartsArea"></div>
     <div class="detail-section" id="detailSection"></div>
     <div class="footer">
-        <p>报告生成时间：2026-04-22 16:58:04 | 数据来源：股票交易盈亏汇总.xlsx</p>
+        <p>报告生成时间：2026-04-24 15:08:54 | 数据来源：股票交易盈亏汇总.xlsx</p>
     </div>
 </div>
 <script>
-const ALL_DATA = [{"date": "2026-04-10", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 354.755, "sellPrice": 357.99, "buyAmount": 70951.0, "sellAmount": 71598.0, "profit": 647.0, "profitPct": "0.91%"}, {"date": "2026-04-10", "source": "两融账户", "code": "688025", "name": "杰普特", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 268.21, "sellPrice": 273.73, "buyAmount": 53642.0, "sellAmount": 54746.0, "profit": 1104.0, "profitPct": "2.06%"}, {"date": "2026-04-10", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 232.67, "sellPrice": 235.38, "buyAmount": 46534.0, "sellAmount": 47076.0, "profit": 542.0, "profitPct": "1.16%"}, {"date": "2026-04-14", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 89.89, "sellPrice": 90.49, "buyAmount": 17978.0, "sellAmount": 18098.0, "profit": 120.0, "profitPct": "0.67%"}, {"date": "2026-04-14", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 300, "sellQty": 200, "matchQty": 200, "buyPrice": 346.9633, "sellPrice": 349.99, "buyAmount": 69392.67, "sellAmount": 69998.0, "profit": 605.33, "profitPct": "0.87%"}, {"date": "2026-04-16", "source": "两融账户", "code": "300014", "name": "亿纬锂能", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 70.89, "sellPrice": 72.23, "buyAmount": 7089.0, "sellAmount": 7223.0, "profit": 134.0, "profitPct": "1.89%"}, {"date": "2026-04-16", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 200, "sellQty": 400, "matchQty": 200, "buyPrice": 95.34, "sellPrice": 96.175, "buyAmount": 19068.0, "sellAmount": 19235.0, "profit": 167.0, "profitPct": "0.88%"}, {"date": "2026-04-16", "source": "两融账户", "code": "688025", "name": "杰普特", "buyQty": 112, "sellQty": 200, "matchQty": 112, "buyPrice": 273.36, "sellPrice": 274.96, "buyAmount": 30616.32, "sellAmount": 30795.52, "profit": 179.2, "profitPct": "0.59%"}, {"date": "2026-04-17", "source": "两融账户", "code": "300750", "name": "宁德时代", "buyQty": 200, "sellQty": 100, "matchQty": 100, "buyPrice": 444.035, "sellPrice": 447.56, "buyAmount": 44403.5, "sellAmount": 44756.0, "profit": 352.5, "profitPct": "0.79%"}, {"date": "2026-04-17", "source": "两融账户", "code": "2222", "name": "福晶科技", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 87.83, "sellPrice": 89.85, "buyAmount": 8783.0, "sellAmount": 8985.0, "profit": 202.0, "profitPct": "2.30%"}, {"date": "2026-04-17", "source": "两融账户", "code": "603920", "name": "世运电路", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 57.89, "sellPrice": 58.97, "buyAmount": 11578.0, "sellAmount": 11794.0, "profit": 216.0, "profitPct": "1.87%"}, {"date": "2026-04-17", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 373.84, "sellPrice": 376.97, "buyAmount": 37384.0, "sellAmount": 37697.0, "profit": 313.0, "profitPct": "0.84%"}, {"date": "2026-04-17", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 264.18, "sellPrice": 267.09, "buyAmount": 52836.0, "sellAmount": 53418.0, "profit": 582.0, "profitPct": "1.10%"}, {"date": "2026-04-20", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 400, "sellQty": 200, "matchQty": 200, "buyPrice": 264.6404, "sellPrice": 261.78, "buyAmount": 52928.08, "sellAmount": 52356.0, "profit": -572.08, "profitPct": "-1.08%"}, {"date": "2026-04-21", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 400, "sellQty": 400, "matchQty": 400, "buyPrice": 355.52, "sellPrice": 359.0025, "buyAmount": 142208.0, "sellAmount": 143601.0, "profit": 1393.0, "profitPct": "0.98%"}, {"date": "2026-04-21", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 250.9, "sellPrice": 252.55, "buyAmount": 50180.0, "sellAmount": 50510.0, "profit": 330.0, "profitPct": "0.66%"}, {"date": "2026-04-21", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 97.07, "sellPrice": 97.6, "buyAmount": 19414.0, "sellAmount": 19520.0, "profit": 106.0, "profitPct": "0.55%"}, {"date": "2026-04-21", "source": "两融账户", "code": "300054", "name": "鼎龙股份", "buyQty": 500, "sellQty": 500, "matchQty": 500, "buyPrice": 51.76, "sellPrice": 52.56, "buyAmount": 25880.0, "sellAmount": 26280.0, "profit": 400.0, "profitPct": "1.55%"}, {"date": "2026-04-22", "source": "两融账户", "code": "2594", "name": "比亚迪", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 101.09, "sellPrice": 101.49, "buyAmount": 10109.0, "sellAmount": 10149.0, "profit": 40.0, "profitPct": "0.40%"}, {"date": "2026-04-22", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 400, "sellQty": 200, "matchQty": 200, "buyPrice": 96.26, "sellPrice": 99.33, "buyAmount": 19252.0, "sellAmount": 19866.0, "profit": 614.0, "profitPct": "3.19%"}, {"date": "2026-04-22", "source": "手机账户", "code": "300502", "name": "新易盛", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 584.335, "sellPrice": 605.245, "buyAmount": 116867.0, "sellAmount": 121049.0, "profit": 4182.0, "profitPct": "3.58%"}, {"date": "2026-04-22", "source": "手机账户", "code": "688025", "name": "杰普特", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 331.27, "sellPrice": 335.88, "buyAmount": 66254.0, "sellAmount": 67176.0, "profit": 922.0, "profitPct": "1.39%"}];
-const NOW = '2026-04-22';
+const ALL_DATA = [{"date": "2026-04-10", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 354.755, "sellPrice": 357.99, "buyAmount": 70951.0, "sellAmount": 71598.0, "profit": 647.0, "profitPct": "0.91%"}, {"date": "2026-04-10", "source": "两融账户", "code": "688025", "name": "杰普特", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 268.21, "sellPrice": 273.73, "buyAmount": 53642.0, "sellAmount": 54746.0, "profit": 1104.0, "profitPct": "2.06%"}, {"date": "2026-04-10", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 232.67, "sellPrice": 235.38, "buyAmount": 46534.0, "sellAmount": 47076.0, "profit": 542.0, "profitPct": "1.16%"}, {"date": "2026-04-14", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 89.89, "sellPrice": 90.49, "buyAmount": 17978.0, "sellAmount": 18098.0, "profit": 120.0, "profitPct": "0.67%"}, {"date": "2026-04-14", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 300, "sellQty": 200, "matchQty": 200, "buyPrice": 346.9633, "sellPrice": 349.99, "buyAmount": 69392.67, "sellAmount": 69998.0, "profit": 605.33, "profitPct": "0.87%"}, {"date": "2026-04-16", "source": "两融账户", "code": "300014", "name": "亿纬锂能", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 70.89, "sellPrice": 72.23, "buyAmount": 7089.0, "sellAmount": 7223.0, "profit": 134.0, "profitPct": "1.89%"}, {"date": "2026-04-16", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 200, "sellQty": 400, "matchQty": 200, "buyPrice": 95.34, "sellPrice": 96.175, "buyAmount": 19068.0, "sellAmount": 19235.0, "profit": 167.0, "profitPct": "0.88%"}, {"date": "2026-04-16", "source": "两融账户", "code": "688025", "name": "杰普特", "buyQty": 112, "sellQty": 200, "matchQty": 112, "buyPrice": 273.36, "sellPrice": 274.96, "buyAmount": 30616.32, "sellAmount": 30795.52, "profit": 179.2, "profitPct": "0.59%"}, {"date": "2026-04-17", "source": "两融账户", "code": "300750", "name": "宁德时代", "buyQty": 200, "sellQty": 100, "matchQty": 100, "buyPrice": 444.035, "sellPrice": 447.56, "buyAmount": 44403.5, "sellAmount": 44756.0, "profit": 352.5, "profitPct": "0.79%"}, {"date": "2026-04-17", "source": "两融账户", "code": "2222", "name": "福晶科技", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 87.83, "sellPrice": 89.85, "buyAmount": 8783.0, "sellAmount": 8985.0, "profit": 202.0, "profitPct": "2.30%"}, {"date": "2026-04-17", "source": "两融账户", "code": "603920", "name": "世运电路", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 57.89, "sellPrice": 58.97, "buyAmount": 11578.0, "sellAmount": 11794.0, "profit": 216.0, "profitPct": "1.87%"}, {"date": "2026-04-17", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 373.84, "sellPrice": 376.97, "buyAmount": 37384.0, "sellAmount": 37697.0, "profit": 313.0, "profitPct": "0.84%"}, {"date": "2026-04-17", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 264.18, "sellPrice": 267.09, "buyAmount": 52836.0, "sellAmount": 53418.0, "profit": 582.0, "profitPct": "1.10%"}, {"date": "2026-04-20", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 400, "sellQty": 200, "matchQty": 200, "buyPrice": 264.6404, "sellPrice": 261.78, "buyAmount": 52928.08, "sellAmount": 52356.0, "profit": -572.08, "profitPct": "-1.08%"}, {"date": "2026-04-21", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 400, "sellQty": 400, "matchQty": 400, "buyPrice": 355.52, "sellPrice": 359.0025, "buyAmount": 142208.0, "sellAmount": 143601.0, "profit": 1393.0, "profitPct": "0.98%"}, {"date": "2026-04-21", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 250.9, "sellPrice": 252.55, "buyAmount": 50180.0, "sellAmount": 50510.0, "profit": 330.0, "profitPct": "0.66%"}, {"date": "2026-04-21", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 97.07, "sellPrice": 97.6, "buyAmount": 19414.0, "sellAmount": 19520.0, "profit": 106.0, "profitPct": "0.55%"}, {"date": "2026-04-21", "source": "两融账户", "code": "300054", "name": "鼎龙股份", "buyQty": 500, "sellQty": 500, "matchQty": 500, "buyPrice": 51.76, "sellPrice": 52.56, "buyAmount": 25880.0, "sellAmount": 26280.0, "profit": 400.0, "profitPct": "1.55%"}, {"date": "2026-04-22", "source": "两融账户", "code": "2594", "name": "比亚迪", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 101.09, "sellPrice": 101.49, "buyAmount": 10109.0, "sellAmount": 10149.0, "profit": 40.0, "profitPct": "0.40%"}, {"date": "2026-04-22", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 400, "sellQty": 200, "matchQty": 200, "buyPrice": 96.26, "sellPrice": 99.33, "buyAmount": 19252.0, "sellAmount": 19866.0, "profit": 614.0, "profitPct": "3.19%"}, {"date": "2026-04-22", "source": "手机账户", "code": "300502", "name": "新易盛", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 584.335, "sellPrice": 605.245, "buyAmount": 116867.0, "sellAmount": 121049.0, "profit": 4182.0, "profitPct": "3.58%"}, {"date": "2026-04-22", "source": "手机账户", "code": "688025", "name": "杰普特", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 331.27, "sellPrice": 335.88, "buyAmount": 66254.0, "sellAmount": 67176.0, "profit": 922.0, "profitPct": "1.39%"}, {"date": "2026-04-23", "source": "两融账户", "code": "2594", "name": "比亚迪", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 100.16, "sellPrice": 99.99, "buyAmount": 10016.0, "sellAmount": 9999.0, "profit": -17.0, "profitPct": "-0.17%"}, {"date": "2026-04-23", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 400, "sellQty": 400, "matchQty": 400, "buyPrice": 263.635, "sellPrice": 268.145, "buyAmount": 105454.0, "sellAmount": 107258.0, "profit": 1804.0, "profitPct": "1.71%"}, {"date": "2026-04-23", "source": "两融账户", "code": "300394", "name": "天孚通信", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 369.015, "sellPrice": 351.03, "buyAmount": 73803.0, "sellAmount": 70206.0, "profit": -3597.0, "profitPct": "-4.87%"}, {"date": "2026-04-23", "source": "两融账户", "code": "300750", "name": "宁德时代", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 437.46, "sellPrice": 440.735, "buyAmount": 87492.0, "sellAmount": 88147.0, "profit": 655.0, "profitPct": "0.75%"}, {"date": "2026-04-23", "source": "两融账户", "code": "688062", "name": "迈威生物", "buyQty": 500, "sellQty": 500, "matchQty": 500, "buyPrice": 38.68, "sellPrice": 38.14, "buyAmount": 19340.0, "sellAmount": 19070.0, "profit": -270.0, "profitPct": "-1.40%"}, {"date": "2026-04-23", "source": "手机账户", "code": "300750", "name": "宁德时代", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 436.75, "sellPrice": 442.85, "buyAmount": 43675.0, "sellAmount": 44285.0, "profit": 610.0, "profitPct": "1.40%"}, {"date": "2026-04-23", "source": "手机账户", "code": "300502", "name": "新易盛", "buyQty": 100, "sellQty": 200, "matchQty": 100, "buyPrice": 602.91, "sellPrice": 610.5, "buyAmount": 60291.0, "sellAmount": 61050.0, "profit": 759.0, "profitPct": "1.26%"}, {"date": "2026-04-23", "source": "手机账户", "code": "300308", "name": "中际旭创", "buyQty": 100, "sellQty": 100, "matchQty": 100, "buyPrice": 895.31, "sellPrice": 901.42, "buyAmount": 89531.0, "sellAmount": 90142.0, "profit": 611.0, "profitPct": "0.68%"}, {"date": "2026-04-24", "source": "两融账户", "code": "688041", "name": "海光信息", "buyQty": 900, "sellQty": 1100, "matchQty": 900, "buyPrice": 278.6778, "sellPrice": 281.4227, "buyAmount": 250810.0, "sellAmount": 253280.45, "profit": 2470.45, "profitPct": "0.98%"}, {"date": "2026-04-24", "source": "两融账户", "code": "688503", "name": "聚和材料", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 89.71, "sellPrice": 92.34, "buyAmount": 17942.0, "sellAmount": 18468.0, "profit": 526.0, "profitPct": "2.93%"}, {"date": "2026-04-24", "source": "两融账户", "code": "300450", "name": "先导智能", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 55.94, "sellPrice": 57.23, "buyAmount": 11188.0, "sellAmount": 11446.0, "profit": 258.0, "profitPct": "2.31%"}, {"date": "2026-04-24", "source": "手机账户", "code": "300502", "name": "新易盛", "buyQty": 200, "sellQty": 200, "matchQty": 200, "buyPrice": 552.43, "sellPrice": 549.795, "buyAmount": 110486.0, "sellAmount": 109959.0, "profit": -527.0, "profitPct": "-0.48%"}];
+const NOW = '2026-04-24';
 let state = { view: 'overview', filterType: 'mtd', customStart: '', customEnd: '', drillParam: null };
 let navStack = [];
 const chartMap = {};
@@ -288,7 +288,8 @@ function renderOverview() {
         <div class="chart-section"><h2 class="chart-title">📈 月度盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取月度明细）</span></h2><div id="chartMonth" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">📅 每日盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取日度明细）</span></h2><div id="chartDaily" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">💰 累计收益曲线</h2><div id="chartCumulative" class="chart-wrap"></div></div>
-        <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏分析 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体/饼块查看个股明细）</span></h2><div class="two-charts"><div id="chartStockBar" class="chart-wrap"></div><div id="chartStockPie" class="chart-wrap"></div></div></div>`;
+        <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏排行 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看个股明细）</span></h2><div id="chartStockBar" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">🥧 盈亏构成分析 <span style="font-size:13px;color:#999;font-weight:normal">（盈利 vs 亏损分布）</span></h2><div id="chartStockPie" class="chart-wrap"></div></div>`;
     document.getElementById('detailSection').innerHTML = '';
     const mc = mkChart('chartMonth');
     mc.setOption({
@@ -329,16 +330,44 @@ function renderOverview() {
     });
     sb.on('click', p => drillTo('stock', p.name));
     const sp = mkChart('chartStockPie');
-    const pieData = stockList.filter(s => s.profit > 0).map(s => ({name:s.name, value:s.profit}));
-    const loseData = stockList.filter(s => s.profit < 0);
-    if (loseData.length > 0) {
-        pieData.push({name:'亏损合计', value: Math.abs(loseData.reduce((s,x)=>s+x.profit,0)), itemStyle:{color:'#27ae60'}});
-    }
-    sp.setOption({
-        tooltip:{ trigger:'item', formatter:'{b}<br/>¥{c} ({d}%)' },
-        series:[{ type:'pie', radius:['35%','65%'], center:['50%','55%'], itemStyle:{ borderRadius:8, borderColor:'#fff', borderWidth:2 }, label:{ show:true, formatter:'{b}\n¥{c}' }, emphasis:{ label:{ show:true, fontSize:14, fontWeight:'bold' } }, data: pieData }]
+    // 盈亏构成：分别展示盈利股票和亏损股票的贡献
+    const winStocks = stockList.filter(s => s.profit > 0);
+    const loseStocks = stockList.filter(s => s.profit < 0);
+
+    let pieData = [];
+    // 盈利部分：每个盈利股票单独显示（红色）
+    winStocks.forEach(s => {
+        pieData.push({name: s.name + ' (盈)', value: s.profit, itemStyle:{color: '#e74c3c'}});
     });
-    sp.on('click', p => { if (p.name === '亏损合计') return; drillTo('stock', p.name); });
+    // 亏损部分：每个亏损股票单独显示（绿色），取绝对值用于饼图面积
+    loseStocks.forEach(s => {
+        pieData.push({name: s.name + ' (亏)', value: Math.abs(s.profit), itemStyle:{color: '#27ae60'}});
+    });
+
+    sp.setOption({
+        tooltip:{ trigger:'item', formatter: function(p) {
+            const isWin = p.name.includes('(盈)');
+            const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
+            const val = p.value;
+            return rawName + '<br/>' + (isWin ? '盈利：' : '亏损：') + '¥' + val.toLocaleString('zh-CN', {minimumFractionDigits:2}) + '<br/>占比：' + p.percent + '%';
+        } },
+        series:[{
+            type:'pie',
+            radius:['30%','60%'],
+            center:['50%','55%'],
+            itemStyle:{ borderRadius:6, borderColor:'#fff', borderWidth:2 },
+            label:{ show:true, formatter: function(p) {
+                const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
+                return rawName + '\n¥' + p.value.toLocaleString('zh-CN', {minimumFractionDigits:0});
+            }, fontSize:11 },
+            emphasis:{ label:{ show:true, fontSize:13, fontWeight:'bold' } },
+            data: pieData
+        }]
+    });
+    sp.on('click', p => {
+        const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
+        drillTo('stock', rawName);
+    });
 }
 function renderMonthView() {
     const allFiltered = getFilteredRecords();
@@ -362,9 +391,17 @@ function renderMonthView() {
     const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
     let cum = [], run = 0;
     dayProfits.forEach(p => { run += p; cum.push(Math.round(run*100)/100); });
+    // 新增：月度股票维度盈亏统计
+    const stockGroups = groupBy(recs, 'name');
+    const stockList = Object.keys(stockGroups).map(n => ({
+        name: n, profit: Math.round(sumField(stockGroups[n],'profit')*100)/100,
+        count: stockGroups[n].length
+    })).sort((a,b) => b.profit - a.profit);
+
     const chartsArea = document.getElementById('chartsArea');
     chartsArea.innerHTML = `
         <div class="chart-section"><h2 class="chart-title">📅 ${month} 每日盈亏 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看当日明细）</span></h2><div id="chartMonthDaily" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">📊 ${month} 各股票盈亏 <span style="font-size:13px;color:#999;font-weight:normal">（横轴：股票名称）</span></h2><div id="chartMonthStock" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">💰 ${month} 月内累计收益</h2><div id="chartMonthCum" class="chart-wrap"></div></div>`;
     const dc = mkChart('chartMonthDaily');
     dc.setOption({
@@ -374,6 +411,18 @@ function renderMonthView() {
         series:[{ type:'bar', data: dayProfits, itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 } }]
     });
     dc.on('click', p => drillTo('day', month + '-' + p.name));
+
+    // 新增：月度股票维度柱状图
+    const msc = mkChart('chartMonthStock');
+    msc.setOption({
+        tooltip:{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true)+'<br/>交易次数：'+stockGroups[p[0].name].length },
+        grid:{ left:'3%', right:'4%', bottom:'15%', containLabel:true },
+        xAxis:{ type:'category', data: stockList.map(s=>s.name), axisLabel:{color:'#555', rotate:30} },
+        yAxis:{ type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
+        series:[{ type:'bar', data: stockList.map(s=>s.profit), itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 } }]
+    });
+    msc.on('click', p => drillTo('stock', p.name));
+
     const ccc = mkChart('chartMonthCum');
     ccc.setOption({
         tooltip:{ trigger:'axis', formatter: p => p[0].name+'<br/>累计：'+fmtMoney(p[0].value,true) },

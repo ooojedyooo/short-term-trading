@@ -69,7 +69,9 @@ def get_source_from_filename(filename):
 # ==================== 图片OCR解析 ====================
 
 def parse_image_trades(image_path):
-    """用手机App截图识别交易记录"""
+    """用手机App截图识别交易记录 - v2.0 改进版
+    策略：不按行分组，而是提取所有关键信息后按股票代码聚合
+    """
     try:
         import easyocr
     except ImportError:
@@ -80,6 +82,7 @@ def parse_image_trades(image_path):
     reader = easyocr.Reader(['ch_sim', 'en'], gpu=False, verbose=False)
     result = reader.readtext(image_path)
 
+    # 提取所有文本项，保留位置信息
     items = []
     for bbox, text, conf in result:
         y_center = (bbox[0][1] + bbox[2][1]) / 2
@@ -87,10 +90,12 @@ def parse_image_trades(image_path):
         items.append({'text': text.strip(), 'y': y_center, 'x': x_center, 'conf': conf})
 
     items.sort(key=lambda r: r['y'])
+
+    # 第一步：按y坐标分组（行间距阈值40px，更宽松）
     rows = []
     current_row = []
     last_y = None
-    y_threshold = 25
+    y_threshold = 40
 
     for item in items:
         if last_y is None or abs(item['y'] - last_y) <= y_threshold:
@@ -107,17 +112,19 @@ def parse_image_trades(image_path):
     for row in rows:
         row.sort(key=lambda r: r['x'])
 
-    records = []
+    # 第二步：从每行提取关键信息
+    raw_records = []
     for row in rows:
         texts = [r['text'] for r in row]
         text_combined = ' '.join(texts)
 
+        # 提取股票代码（6位数字）
         code_match = re.search(r'\b(\d{6})\b', text_combined)
         if not code_match:
             continue
-
         stock_code = code_match.group(1)
 
+        # 提取方向
         direction = None
         if '买入' in text_combined or '买' in text_combined:
             direction = '证券买入'
@@ -126,8 +133,11 @@ def parse_image_trades(image_path):
         else:
             continue
 
+        # 提取股票名称：在代码之前或之后的中文
         stock_name = ''
         code_idx = text_combined.find(stock_code)
+        
+        # 尝试代码前面
         if code_idx > 0:
             prefix = text_combined[:code_idx].strip()
             prefix = re.sub(r'\d{1,2}:\d{2}:\d{2}', '', prefix)
@@ -136,7 +146,18 @@ def parse_image_trades(image_path):
             cn_match = re.findall(r'[\u4e00-\u9fff]+', prefix)
             if cn_match:
                 stock_name = cn_match[-1]
+        
+        # 如果前面没找到，尝试代码后面
+        if not stock_name:
+            suffix = text_combined[code_idx + 6:].strip()  # 代码后6位之后
+            suffix = re.sub(r'\d+\.?\d*', '', suffix)  # 移除数字
+            suffix = re.sub(r'买入|卖出|买|卖|成交', '', suffix)
+            suffix = suffix.strip()
+            cn_match = re.findall(r'[\u4e00-\u9fff]+', suffix)
+            if cn_match:
+                stock_name = cn_match[0]  # 取第一个
 
+        # 提取数字（价格、金额、数量）
         numbers_text = text_combined.replace(stock_code, '')
         numbers = re.findall(r'\d+\.?\d*', numbers_text)
         numbers = [float(n) for n in numbers if float(n) > 0]
@@ -144,6 +165,7 @@ def parse_image_trades(image_path):
         if len(numbers) < 3:
             continue
 
+        # 识别成交量（整数且>=100）
         volume = None
         for n in sorted(numbers):
             if n >= 100 and n == int(n):
@@ -152,25 +174,72 @@ def parse_image_trades(image_path):
         if volume is None:
             volume = int(min(numbers))
 
+        # 识别成交金额（最大值）
         amount = max(numbers)
-        price = round(amount / volume, 3) if volume > 0 else 0
 
+        # 识别成交价
+        price = round(amount / volume, 3) if volume > 0 else 0
         for n in numbers:
             if n != amount and n != volume and abs(n - price) < 1:
                 price = n
                 break
 
-        records.append({
+        raw_records.append({
             '证券代码': stock_code,
-            '证券名称': stock_name if stock_name else '未知',
+            '证券名称': stock_name,
             '买卖类别': direction,
-            '成交类型': '成交',
             '成交数量': volume,
             '成交价格': price,
-            '成交金额': amount
+            '成交金额': amount,
+            'y': sum(r['y'] for r in row) / len(row)  # 记录行y坐标用于调试
         })
 
-    df = pd.DataFrame(records)
+    # 第三步：按股票代码聚合，合并同一股票的名称
+    # 用出现次数最多的名称作为该股票的正式名称
+    from collections import Counter
+
+    code_names = {}
+    for rec in raw_records:
+        code = rec['证券代码']
+        name = rec['证券名称']
+        if name and name != '未知':
+            if code not in code_names:
+                code_names[code] = []
+            code_names[code].append(name)
+
+    # 为每个代码选择最佳名称
+    best_names = {}
+    for code, names in code_names.items():
+        counter = Counter(names)
+        best_names[code] = counter.most_common(1)[0][0]
+
+    # 填充缺失的名称
+    for rec in raw_records:
+        code = rec['证券代码']
+        if not rec['证券名称'] or rec['证券名称'] == '未知':
+            if code in best_names:
+                rec['证券名称'] = best_names[code]
+            else:
+                rec['证券名称'] = '未知'
+
+    # 去重：同一方向+同一代码+同一数量+同一金额视为重复
+    seen = set()
+    unique_records = []
+    for rec in raw_records:
+        key = (rec['证券代码'], rec['买卖类别'], rec['成交数量'], rec['成交金额'])
+        if key not in seen:
+            seen.add(key)
+            unique_records.append({
+                '证券代码': rec['证券代码'],
+                '证券名称': rec['证券名称'],
+                '买卖类别': rec['买卖类别'],
+                '成交类型': '成交',
+                '成交数量': rec['成交数量'],
+                '成交价格': rec['成交价格'],
+                '成交金额': rec['成交金额']
+            })
+
+    df = pd.DataFrame(unique_records)
     print(f"  识别到 {len(df)} 条交易记录")
     return df
 
@@ -937,7 +1006,8 @@ function renderOverview() {{
         <div class="chart-section"><h2 class="chart-title">📈 月度盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取月度明细）</span></h2><div id="chartMonth" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">📅 每日盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取日度明细）</span></h2><div id="chartDaily" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">💰 累计收益曲线</h2><div id="chartCumulative" class="chart-wrap"></div></div>
-        <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏分析 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体/饼块查看个股明细）</span></h2><div class="two-charts"><div id="chartStockBar" class="chart-wrap"></div><div id="chartStockPie" class="chart-wrap"></div></div></div>`;
+        <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏排行 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看个股明细）</span></h2><div id="chartStockBar" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">🥧 盈亏构成分析 <span style="font-size:13px;color:#999;font-weight:normal">（盈利 vs 亏损分布）</span></h2><div id="chartStockPie" class="chart-wrap"></div></div>`;
     document.getElementById('detailSection').innerHTML = '';
     const mc = mkChart('chartMonth');
     mc.setOption({{
@@ -978,16 +1048,44 @@ function renderOverview() {{
     }});
     sb.on('click', p => drillTo('stock', p.name));
     const sp = mkChart('chartStockPie');
-    const pieData = stockList.filter(s => s.profit > 0).map(s => ({{name:s.name, value:s.profit}}));
-    const loseData = stockList.filter(s => s.profit < 0);
-    if (loseData.length > 0) {{
-        pieData.push({{name:'亏损合计', value: Math.abs(loseData.reduce((s,x)=>s+x.profit,0)), itemStyle:{{color:'#27ae60'}}}});
-    }}
-    sp.setOption({{
-        tooltip:{{ trigger:'item', formatter:'{{b}}<br/>¥{{c}} ({{d}}%)' }},
-        series:[{{ type:'pie', radius:['35%','65%'], center:['50%','55%'], itemStyle:{{ borderRadius:8, borderColor:'#fff', borderWidth:2 }}, label:{{ show:true, formatter:'{{b}}\\n¥{{c}}' }}, emphasis:{{ label:{{ show:true, fontSize:14, fontWeight:'bold' }} }}, data: pieData }}]
+    // 盈亏构成：分别展示盈利股票和亏损股票的贡献
+    const winStocks = stockList.filter(s => s.profit > 0);
+    const loseStocks = stockList.filter(s => s.profit < 0);
+
+    let pieData = [];
+    // 盈利部分：每个盈利股票单独显示（红色）
+    winStocks.forEach(s => {{
+        pieData.push({{name: s.name + ' (盈)', value: s.profit, itemStyle:{{color: '#e74c3c'}}}});
     }});
-    sp.on('click', p => {{ if (p.name === '亏损合计') return; drillTo('stock', p.name); }});
+    // 亏损部分：每个亏损股票单独显示（绿色），取绝对值用于饼图面积
+    loseStocks.forEach(s => {{
+        pieData.push({{name: s.name + ' (亏)', value: Math.abs(s.profit), itemStyle:{{color: '#27ae60'}}}});
+    }});
+
+    sp.setOption({{
+        tooltip:{{ trigger:'item', formatter: function(p) {{
+            const isWin = p.name.includes('(盈)');
+            const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
+            const val = p.value;
+            return rawName + '<br/>' + (isWin ? '盈利：' : '亏损：') + '¥' + val.toLocaleString('zh-CN', {{minimumFractionDigits:2}}) + '<br/>占比：' + p.percent + '%';
+        }} }},
+        series:[{{
+            type:'pie',
+            radius:['30%','60%'],
+            center:['50%','55%'],
+            itemStyle:{{ borderRadius:6, borderColor:'#fff', borderWidth:2 }},
+            label:{{ show:true, formatter: function(p) {{
+                const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
+                return rawName + '\\n¥' + p.value.toLocaleString('zh-CN', {{minimumFractionDigits:0}});
+            }}, fontSize:11 }},
+            emphasis:{{ label:{{ show:true, fontSize:13, fontWeight:'bold' }} }},
+            data: pieData
+        }}]
+    }});
+    sp.on('click', p => {{
+        const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
+        drillTo('stock', rawName);
+    }});
 }}
 function renderMonthView() {{
     const allFiltered = getFilteredRecords();
@@ -1011,9 +1109,17 @@ function renderMonthView() {{
     const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
     let cum = [], run = 0;
     dayProfits.forEach(p => {{ run += p; cum.push(Math.round(run*100)/100); }});
+    // 新增：月度股票维度盈亏统计
+    const stockGroups = groupBy(recs, 'name');
+    const stockList = Object.keys(stockGroups).map(n => ({{
+        name: n, profit: Math.round(sumField(stockGroups[n],'profit')*100)/100,
+        count: stockGroups[n].length
+    }})).sort((a,b) => b.profit - a.profit);
+
     const chartsArea = document.getElementById('chartsArea');
     chartsArea.innerHTML = `
         <div class="chart-section"><h2 class="chart-title">📅 ${{month}} 每日盈亏 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看当日明细）</span></h2><div id="chartMonthDaily" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">📊 ${{month}} 各股票盈亏 <span style="font-size:13px;color:#999;font-weight:normal">（横轴：股票名称）</span></h2><div id="chartMonthStock" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">💰 ${{month}} 月内累计收益</h2><div id="chartMonthCum" class="chart-wrap"></div></div>`;
     const dc = mkChart('chartMonthDaily');
     dc.setOption({{
@@ -1023,6 +1129,18 @@ function renderMonthView() {{
         series:[{{ type:'bar', data: dayProfits, itemStyle:{{ color: p => profitColor(p.value) }}, label:{{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 }} }}]
     }});
     dc.on('click', p => drillTo('day', month + '-' + p.name));
+
+    // 新增：月度股票维度柱状图
+    const msc = mkChart('chartMonthStock');
+    msc.setOption({{
+        tooltip:{{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true)+'<br/>交易次数：'+stockGroups[p[0].name].length }},
+        grid:{{ left:'3%', right:'4%', bottom:'15%', containLabel:true }},
+        xAxis:{{ type:'category', data: stockList.map(s=>s.name), axisLabel:{{color:'#555', rotate:30}} }},
+        yAxis:{{ type:'value', name:'盈亏（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
+        series:[{{ type:'bar', data: stockList.map(s=>s.profit), itemStyle:{{ color: p => profitColor(p.value) }}, label:{{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 }} }}]
+    }});
+    msc.on('click', p => drillTo('stock', p.name));
+
     const ccc = mkChart('chartMonthCum');
     ccc.setOption({{
         tooltip:{{ trigger:'axis', formatter: p => p[0].name+'<br/>累计：'+fmtMoney(p[0].value,true) }},
