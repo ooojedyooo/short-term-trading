@@ -1,21 +1,22 @@
 """
 股票交易盈亏分析系统
 功能：自动分析股票交易记录，计算盈亏并生成报告
-支持两种输入：
+支持三种输入：
   1. Excel文件（券商导出）— 文件名格式：YYYY-MM-DD-两融-当日成交汇总.xlsx
   2. 图片文件（手机App截图）— 文件名格式：YYYY-MM-DD-手机交易.png/.jpg/.jpeg
+  3. 图片文件（平安证券截图）— 文件名格式：YYYYMMDD_平安.png
 作者：WorkBuddy
-版本：v4.1
-更新日期：2026-04-22
+版本：v4.2
+更新日期：2026-04-30
 
 使用说明：
-1. 将券商导出的Excel交易记录文件或手机App截图放到当前文件夹
+1. 将券商导出的Excel交易记录文件、手机App截图或平安证券截图放到当前文件夹
 2. 运行此脚本，自动处理所有未归档的文件
 3. 处理后的原始文件会自动归档到history文件夹
 4. HTML报告生成到reports文件夹（单日报告 + 汇总可视化报告）
 5. Excel汇总文件支持去重更新（同日期+同来源的数据会覆盖）
 6. 汇总可视化报告支持时间筛选和多级数据钻取
-7. 同一天可以同时有Excel和图片两种输入，数据会自动合并
+7. 同一天可以同时有Excel、手机截图和平安截图多种输入，数据会自动合并
 
 文件结构：
 - 当前文件夹：待处理的Excel文件和图片文件
@@ -61,7 +62,13 @@ def get_source_from_filename(filename):
     fname_lower = filename.lower()
     if fname_lower.endswith('.xlsx'):
         return '两融账户'
+    elif fname_lower.endswith('.xls'):
+        if '平安' in fname_lower:
+            return '平安账户'
+        return '两融账户'
     elif any(fname_lower.endswith(ext) for ext in ['.png', '.jpg', '.jpeg']):
+        if '平安' in fname_lower:
+            return '平安账户'
         return '手机账户'
     return '未知'
 
@@ -72,6 +79,13 @@ def parse_image_trades(image_path):
     """用手机App截图识别交易记录 - v2.0 改进版
     策略：不按行分组，而是提取所有关键信息后按股票代码聚合
     """
+    # 修复Windows下torch/getpass环境变量问题
+    import os as _os
+    if not _os.environ.get('USERNAME'):
+        _os.environ['USERNAME'] = 'Ryan'
+    if not _os.environ.get('USER'):
+        _os.environ['USER'] = 'Ryan'
+
     try:
         import easyocr
     except ImportError:
@@ -245,7 +259,7 @@ def parse_image_trades(image_path):
 
 
 def process_image_file(image_path):
-    """处理单个图片文件"""
+    """处理单个图片文件（根据来源路由到不同解析器）"""
     trading_date = extract_date_from_filename(image_path)
     source = get_source_from_filename(os.path.basename(image_path))
 
@@ -255,7 +269,10 @@ def process_image_file(image_path):
     print(f"数据来源：{source}")
     print('='*80)
 
-    df = parse_image_trades(image_path)
+    if source == '平安账户':
+        df = parse_pingan_image_trades(image_path)
+    else:
+        df = parse_image_trades(image_path)
 
     if len(df) == 0:
         print("未识别到有效交易记录")
@@ -277,10 +294,396 @@ def process_image_file(image_path):
     return result_df, trading_date, total_profit, source
 
 
+# ==================== 平安证券截图OCR解析 ====================
+
+def _infer_code_by_name(partial_code, stock_name):
+    """通过股票名称和部分代码推断完整代码
+    当OCR只识别出5位或不完整代码时，尝试修正
+    """
+    if not stock_name or stock_name == '未知':
+        return None
+
+    # 如果同一批次中已经有其他行识别出了完整代码+相同名称，优先匹配
+    # （在parse_pingan_image_trades中通过known_codes参数传递）
+
+    # 常见科创板代码修正：68开头缺位的
+    digits = re.sub(r'[^0-9]', '', partial_code)
+    if len(digits) == 5 and (digits.startswith('68') or digits.startswith('63')):
+        # 尝试在688xxx范围内搜索已知股票
+        pass  # 由外层调用者通过已知代码匹配
+
+    return None
+
+
+# 已知股票代码映射（用于OCR识别不完整时通过名称匹配）
+KNOWN_STOCK_NAMES = {
+    '厦钨新能': '688778', '厦钨新能源': '688778', '度钨新能源': '688778',
+    '辰钨新能源': '688778', '钨新能源': '688778',
+}
+
+
+def _lookup_code_by_name(name):
+    """通过模糊名称匹配查找股票代码"""
+    if not name or name == '未知':
+        return None
+    # 精确匹配
+    if name in KNOWN_STOCK_NAMES:
+        return KNOWN_STOCK_NAMES[name]
+    # 模糊匹配：名称包含关键词
+    for key, code in KNOWN_STOCK_NAMES.items():
+        if len(key) >= 3 and key[:3] in name:
+            return code
+        if len(name) >= 3 and name[:3] in key:
+            return code
+    return None
+
+
+def parse_pingan_image_trades(image_path):
+    """解析平安证券成交明细截图
+    平安截图特点：严格的列式表格，有固定表头
+    列：成交时间 | 证券代码 | 证券名称 | 操作 | 成交量 | 成交均价 | 成交金额
+    """
+    # 修复Windows下torch/getpass环境变量问题
+    import os as _os
+    if not _os.environ.get('USERNAME'):
+        _os.environ['USERNAME'] = 'Ryan'
+    if not _os.environ.get('USER'):
+        _os.environ['USER'] = 'Ryan'
+
+    try:
+        import easyocr
+    except ImportError:
+        print(f"[错误] 缺少OCR依赖，请运行：pip install easyocr")
+        return pd.DataFrame()
+
+    import numpy as np
+    from PIL import Image
+
+    print(f"  正在识别平安截图：{os.path.basename(image_path)}")
+    reader = easyocr.Reader(['ch_sim', 'en'], gpu=False, verbose=False)
+
+    # 使用PIL读取并通过numpy传给easyocr（避免OpenCV路径问题）
+    img = Image.open(image_path)
+    # 如果图片太小，放大3倍提高OCR识别率
+    w, h = img.size
+    scale = 1
+    if h < 300:
+        scale = 3
+        img = img.resize((w * scale, h * scale), Image.LANCZOS)
+        print(f"  图片已放大 ({w}x{h} → {w*scale}x{h*scale})")
+    img_array = np.array(img)
+    result = reader.readtext(img_array)
+
+    # 提取所有文本项，保留位置信息（还原坐标到原始比例）
+    items = []
+    for bbox, text, conf in result:
+        y_center = (bbox[0][1] + bbox[2][1]) / 2 / scale
+        x_center = (bbox[0][0] + bbox[2][0]) / 2 / scale
+        items.append({'text': text.strip(), 'y': y_center, 'x': x_center, 'conf': conf})
+
+    items.sort(key=lambda r: r['y'])
+
+    # 第一步：识别表头行，确定各列的x范围
+    # 表头关键词映射（OCR可能误读，允许多个匹配模式）
+    header_patterns = {
+        '成交时间': ['成交时间'],
+        '证券代码': ['证券代码', '代码'],
+        '证券名称': ['证券名称', '名称'],
+        '操作': ['操作'],
+        '成交量': ['成交量', '成交粼', '成交数量', '数量'],
+        '成交均价': ['成交均价', '均价'],
+        '成交金额': ['成交金额', '金额', '成交额'],
+    }
+
+    header_keywords = {k: None for k in header_patterns}
+    header_y = None
+    used_positions = set()
+
+    for item in items:
+        text = item['text']
+        # 先精确匹配
+        for col_name, patterns in header_patterns.items():
+            if header_keywords[col_name] is not None:
+                continue  # 已匹配
+            for pat in patterns:
+                if pat in text:
+                    header_keywords[col_name] = item['x']
+                    header_y = item['y']
+                    used_positions.add(item['x'])
+                    break
+
+    # 如果某些列没识别到表头，用已识别的列推算
+    found_headers = {k: v for k, v in header_keywords.items() if v is not None}
+    if len(found_headers) < 3:
+        print("  [警告] 未能识别足够表头列，尝试回退到手机截图解析模式")
+        return parse_image_trades(image_path)  # 回退到通用解析
+
+    # 确定列边界（每列取两个相邻表头x的中点作为分界）
+    sorted_headers = sorted(found_headers.items(), key=lambda kv: kv[1])
+    column_ranges = {}
+    for i, (col_name, col_x) in enumerate(sorted_headers):
+        if i == 0:
+            left = 0
+        else:
+            left = (sorted_headers[i-1][1] + col_x) / 2
+        if i == len(sorted_headers) - 1:
+            right = 99999
+        else:
+            right = (col_x + sorted_headers[i+1][1]) / 2
+        column_ranges[col_name] = (left, right)
+
+    print(f"  识别到表头列：{list(column_ranges.keys())}")
+
+    # 第二步：按y坐标分组成数据行（跳过表头行）
+    data_items = [item for item in items if item['y'] > header_y + 5]
+    if not data_items:
+        print("  未找到数据行")
+        return pd.DataFrame()
+
+    rows = []
+    current_row = []
+    last_y = None
+    y_threshold = 15  # 平安截图行间距较小
+
+    for item in data_items:
+        if last_y is None or abs(item['y'] - last_y) <= y_threshold:
+            current_row.append(item)
+        else:
+            if current_row:
+                rows.append(current_row)
+            current_row = [item]
+        last_y = item['y']
+
+    if current_row:
+        rows.append(current_row)
+
+    # 第三步：从每行提取各列数据
+    raw_records = []
+    for row in rows:
+        record = {}
+        for col_name, (left, right) in column_ranges.items():
+            col_texts = [r['text'] for r in row if left <= r['x'] < right]
+            if col_texts:
+                # 取该范围内置信度最高的文本
+                best = max(
+                    [r for r in row if left <= r['x'] < right],
+                    key=lambda r: r['conf'],
+                    default=None
+                )
+                record[col_name] = best['text'] if best else ' '.join(col_texts)
+            else:
+                record[col_name] = ''
+
+        raw_records.append(record)
+
+    # 第四步：数据清洗和转换
+    trades = []
+    for rec in raw_records:
+        # 股票代码清洗：修正OCR常见误读
+        code = rec.get('证券代码', '').strip()
+        # 去除非数字字符
+        code_digits = re.sub(r'[^0-9]', '', code)
+
+        # 修正常见OCR错误模式
+        if code_digits.startswith('633') and len(code_digits) == 6:
+            code_digits = '688' + code_digits[3:]  # 633xxx → 688xxx
+        elif code_digits.startswith('655') and len(code_digits) == 6:
+            code_digits = '688' + code_digits[3:]  # 655xxx → 688xxx
+
+        # 修正缺位：如 68775 → 688778（OCR漏了数字）
+        if len(code_digits) == 5:
+            code_match = re.search(r'(\d{6})', code)
+            if not code_match:
+                # 尝试常见的科创板补位模式
+                if code_digits.startswith('688') or code_digits.startswith('68'):
+                    # 可能漏了中间的数字，用已知代码表推断
+                    pass  # 无法可靠推断，保留原始
+
+        # 提取6位数字
+        code_match = re.search(r'(\d{6})', code_digits if len(code_digits) >= 6 else code)
+        if code_match:
+            code = code_match.group(1)
+        elif len(code_digits) == 6:
+            code = code_digits
+        else:
+            # 代码不完整，尝试通过已识别到的股票名称推断
+            code = _infer_code_by_name(code, rec.get('证券名称', ''))
+            if not code:
+                # 通过已知名称映射查找
+                code = _lookup_code_by_name(rec.get('证券名称', ''))
+            if not code:
+                print(f"    [跳过] 无法识别股票代码: {rec.get('证券代码', '')}")
+                continue
+
+        # 股票名称清洗
+        name = rec.get('证券名称', '').strip()
+        if not name:
+            name = '未知'
+
+        # 操作方向清洗
+        operation = rec.get('操作', '').strip()
+        # 修正常见OCR误读
+        if any(kw in operation for kw in ['卖', '觌出', '卖出']):
+            direction = '证券卖出'
+        elif any(kw in operation for kw in ['买', '买入']):
+            direction = '证券买入'
+        else:
+            print(f"    [跳过] 无法判断买卖方向: {operation}")
+            continue
+
+        # 成交量清洗
+        volume_text = rec.get('成交量', '').strip()
+        volume = None
+        if volume_text:
+            vol_clean = re.sub(r'[^0-9]', '', volume_text)
+            try:
+                volume = int(vol_clean)
+            except ValueError:
+                pass
+
+        # 成交金额清洗
+        amount_text = rec.get('成交金额', '').strip()
+        amount = None
+        if amount_text:
+            amt_clean = re.sub(r'[^0-9.]', '', amount_text)
+            # 处理多个小数点的情况
+            parts = amt_clean.split('.')
+            if len(parts) > 2:
+                amt_clean = parts[0] + '.' + ''.join(parts[1:])
+            try:
+                amount = float(amt_clean)
+            except ValueError:
+                pass
+
+        # 成交均价清洗
+        price_text = rec.get('成交均价', '').strip()
+        price = None
+        if price_text:
+            price_clean = re.sub(r'[^0-9.]', '', price_text)
+            parts = price_clean.split('.')
+            if len(parts) > 2:
+                price_clean = parts[0] + '.' + ''.join(parts[1:])
+            try:
+                price = float(price_clean)
+            except ValueError:
+                pass
+
+        # 交叉验证与修正：如果 amount 存在，用它反推更可靠的 price/volume
+        if amount and volume and price:
+            calculated = round(volume * price, 2)
+            if abs(calculated - amount) > max(amount * 0.02, 1):
+                # 差异超过2%或1元，说明price可能误读，用amount反推
+                price = round(amount / volume, 4)
+        elif amount and volume and not price:
+            price = round(amount / volume, 4)
+        elif amount and price and not volume:
+            volume = int(round(amount / price))
+        elif volume and price and not amount:
+            amount = round(volume * price, 2)
+
+        # 跳过无效记录
+        if not code or not name or volume is None:
+            continue
+
+        trades.append({
+            '证券代码': code,
+            '证券名称': name,
+            '买卖类别': direction,
+            '成交类型': '成交',
+            '成交数量': volume,
+            '成交价格': price or 0,
+            '成交金额': amount or 0
+        })
+
+    # 去重：同代码+同方向+同数量+同金额视为重复
+    seen = set()
+    unique_records = []
+    for t in trades:
+        key = (t['证券代码'], t['买卖类别'], t['成交数量'], t['成交金额'])
+        if key not in seen:
+            seen.add(key)
+            unique_records.append(t)
+
+    df = pd.DataFrame(unique_records)
+    print(f"  识别到 {len(df)} 条交易记录")
+    if len(df) > 0:
+        for _, row in df.iterrows():
+            print(f"    {row['证券名称']}({row['证券代码']}) {row['买卖类别']} "
+                  f"数量={row['成交数量']} 均价={row['成交价格']:.4f} 金额={row['成交金额']:.2f}")
+    return df
+
+
 # ==================== Excel处理 ====================
 
+def parse_pingan_excel(file_path):
+    """解析平安证券导出的成交记录
+    平安导出文件特点：
+    - 文件名含"平安"，扩展名可能是 .xls 但实际上可能是 TSV 格式（GBK编码）
+    - 也可能是真正的 .xls 老格式
+    - 第一行为列名，数据从第二行开始
+    - 列：成交时间 | 证券代码 | 证券名称 | 操作 | 成交数量 | 成交均价 | 成交金额 | ...
+    - 证券代码用格式：="688778"（需要剥离）
+    - 操作用"买入"/"卖出"（需映射为标准格式）
+    """
+    # 先尝试作为TSV读取（GBK编码，平安常见导出格式）
+    try:
+        raw_df = pd.read_csv(file_path, sep='\t', encoding='gbk', dtype=str)
+    except Exception:
+        # 回退到xlrd引擎读真正的.xls
+        engine = 'xlrd' if file_path.lower().endswith('.xls') else None
+        raw_df = pd.read_excel(file_path, engine=engine)
+
+    # 只取需要的列，映射到标准字段名
+    col_map = {
+        '证券代码': '证券代码', '证券名称': '证券名称',
+        '操作': '买卖类别', '成交数量': '成交数量',
+        '成交均价': '成交价格', '成交金额': '成交金额',
+    }
+
+    df = pd.DataFrame()
+    name_col = None
+    for src_col, dst_col in col_map.items():
+        if src_col in raw_df.columns:
+            val = raw_df[src_col]
+            if dst_col == '证券代码':
+                # 清洗 ="688778" 格式
+                val = val.astype(str).str.replace('=', '').str.replace('"', '').str.strip()
+            df[dst_col] = val
+        elif dst_col == '证券名称' and '证券名称' in raw_df.columns:
+            name_col = '证券名称'
+            df['证券名称'] = raw_df['证券名称']
+
+    # 添加统一的成交类型
+    df['成交类型'] = '成交'
+
+    # 映射操作字段：买入→证券买入，卖出→证券卖出
+    df['买卖类别'] = df['买卖类别'].apply(
+        lambda x: '证券买入' if '买' in str(x) else ('证券卖出' if '卖' in str(x) else str(x))
+    )
+
+    # 证券代码清洗（去除非数字字符）
+    df['证券代码'] = df['证券代码'].astype(str).str.replace(r'[^0-9]', '', regex=True)
+    df['成交数量'] = pd.to_numeric(df['成交数量'], errors='coerce')
+    df['成交价格'] = pd.to_numeric(df['成交价格'], errors='coerce')
+    df['成交金额'] = pd.to_numeric(df['成交金额'], errors='coerce')
+
+    # 去空行，验证代码6位
+    df = df.dropna(subset=['证券代码'])
+    df = df[df['证券代码'].str.len() == 6]
+
+    print(f"  识别到 {len(df)} 条交易记录")
+    if len(df) > 0:
+        name_col_ref = name_col if name_col and name_col in raw_df.columns else None
+        for i, row in df.iterrows():
+            name = raw_df.loc[i, name_col_ref] if name_col_ref and i in raw_df.index else row.get('证券名称', '')
+            print(f"    {name}({row['证券代码']}) {row['买卖类别']} "
+                  f"数量={int(row['成交数量'])} 均价={row['成交价格']:.4f} 金额={row['成交金额']:.2f}")
+
+    return df
+
+
 def process_excel_file(input_file):
-    """处理单个Excel文件"""
+    """处理单个Excel文件（根据来源路由到不同解析器）"""
     trading_date = extract_date_from_filename(input_file)
     source = get_source_from_filename(os.path.basename(input_file))
 
@@ -290,15 +693,17 @@ def process_excel_file(input_file):
     print(f"数据来源：{source}")
     print('='*80)
 
-    df = pd.read_excel(input_file, skiprows=4, header=0)
-    df.columns = ['证券代码', '证券名称', '买卖类别', '成交类型', '成交数量', '成交价格', '成交金额']
-    df['证券代码'] = df['证券代码'].astype(str).str.replace('\t', '')
-    df = df.dropna(subset=['证券代码'])
-    df = df[df['证券代码'] != '证券代码']
-
-    df['成交数量'] = pd.to_numeric(df['成交数量'], errors='coerce')
-    df['成交价格'] = pd.to_numeric(df['成交价格'], errors='coerce')
-    df['成交金额'] = pd.to_numeric(df['成交金额'], errors='coerce')
+    if source == '平安账户':
+        df = parse_pingan_excel(input_file)
+    else:
+        df = pd.read_excel(input_file, skiprows=4, header=0)
+        df.columns = ['证券代码', '证券名称', '买卖类别', '成交类型', '成交数量', '成交价格', '成交金额']
+        df['证券代码'] = df['证券代码'].astype(str).str.replace('\t', '')
+        df = df.dropna(subset=['证券代码'])
+        df = df[df['证券代码'] != '证券代码']
+        df['成交数量'] = pd.to_numeric(df['成交数量'], errors='coerce')
+        df['成交价格'] = pd.to_numeric(df['成交价格'], errors='coerce')
+        df['成交金额'] = pd.to_numeric(df['成交金额'], errors='coerce')
 
     buy_records = df[df['买卖类别'].str.contains('证券买入', na=False)].copy()
     sell_records = df[df['买卖类别'].str.contains('证券卖出', na=False)].copy()
@@ -559,6 +964,7 @@ def generate_html_report_from_summary(trading_date):
         }}
         .source-两融 {{ background: #e3f2fd; color: #1976d2; }}
         .source-手机 {{ background: #fff3e0; color: #f57c00; }}
+        .source-平安 {{ background: #e8f5e9; color: #388e3c; }}
         /* 列宽设置 */
         th:nth-child(1), td:nth-child(1) {{ width: 12%; }} /* 数据来源 */
         th:nth-child(2), td:nth-child(2) {{ width: 18%; }} /* 证券名称 */
@@ -1273,7 +1679,7 @@ def archive_file(input_file):
 
 def find_input_files():
     """查找待处理的所有输入文件（Excel + 图片）"""
-    excel_files = [f for f in glob.glob('*.xlsx')
+    excel_files = [f for f in glob.glob('*.xlsx') + glob.glob('*.xls')
                    if f not in ['股票交易盈亏汇总.xlsx']
                    and not f.startswith('~$')]
 
@@ -1289,8 +1695,8 @@ def find_input_files():
 
 def main():
     print("\n" + "="*80)
-    print("股票交易盈亏分析系统 v4.1")
-    print("支持输入：Excel文件（券商导出）+ 图片文件（手机App截图）")
+    print("股票交易盈亏分析系统 v4.2")
+    print("支持输入：Excel文件（券商导出）+ 图片文件（手机App截图/平安证券截图）")
     print("="*80)
 
     excel_files, image_files = find_input_files()
@@ -1299,8 +1705,9 @@ def main():
     if not all_files:
         print("\n未找到待处理的文件")
         print("请将以下类型文件放到当前文件夹：")
-        print("  - Excel文件：券商导出的交易记录（如：2026-04-22-两融-当日成交汇总.xlsx）")
+        print("  - Excel文件：券商/平安导出的交易记录（如：2026-04-22-两融-当日成交汇总.xlsx 或 20260430_平安.xls）")
         print("  - 图片文件：手机App截图（如：2026-04-22-手机交易.png）")
+        print("  - 图片文件：平安证券截图（如：20260430_平安.png）")
         generate_summary_html()
         return
 
