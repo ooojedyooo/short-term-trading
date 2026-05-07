@@ -1563,17 +1563,8 @@ function renderMonthView() {{
     const recs = allFiltered.filter(r => r.date.startsWith(month));
     if (recs.length === 0) {{ goBackOverview(); return; }}
     const monthProfit = sumField(recs, 'profit');
-    const monthBuy = sumField(recs, 'buyAmount');
-    const monthDays = unique(recs, 'date');
     const monthStocks = unique(recs, 'name');
-    renderStats([
-        {{label:'月份', value: month, cls:'neutral'}},
-        {{label:'交易天数', value: monthDays.length, cls:'neutral'}},
-        {{label:'交易笔数', value: recs.length, cls:'neutral'}},
-        {{label:'涉及股票', value: monthStocks.length, cls:'neutral'}},
-        {{label:'月度盈亏', value: fmtMoney(monthProfit,true), cls: profitCls(monthProfit)}},
-        {{label:'月度收益率', value: fmtPct(monthBuy>0?monthProfit/monthBuy*100:0,true), cls: profitCls(monthProfit)}},
-    ]);
+    renderStats(computeStats(recs));
     const dayGroups = groupBy(recs, 'date');
     const days = Object.keys(dayGroups).sort();
     const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
@@ -1625,18 +1616,7 @@ function renderDayView() {{
     const date = state.drillParam;
     const recs = allFiltered.filter(r => r.date === date);
     if (recs.length === 0) {{ goBack(); return; }}
-    const dayProfit = sumField(recs, 'profit');
-    const dayBuy = sumField(recs, 'buyAmount');
-    const dayRate = dayBuy > 0 ? dayProfit / dayBuy * 100 : 0;
-    const winCount = recs.filter(r => r.profit > 0).length;
-    renderStats([
-        {{label:'日期', value: date, cls:'neutral'}},
-        {{label:'交易笔数', value: recs.length, cls:'neutral'}},
-        {{label:'盈利笔数', value: winCount, cls:'profit'}},
-        {{label:'亏损笔数', value: recs.length - winCount, cls:'loss'}},
-        {{label:'当日盈亏', value: fmtMoney(dayProfit,true), cls: profitCls(dayProfit)}},
-        {{label:'当日收益率', value: fmtPct(dayRate,true), cls: profitCls(dayRate)}},
-    ]);
+    renderStats(computeStats(recs));
     const sorted = [...recs].sort((a,b) => b.profit - a.profit);
     const chartsArea = document.getElementById('chartsArea');
     chartsArea.innerHTML = `<div class="chart-section"><h2 class="chart-title">📊 ${{date}} 各股票盈亏</h2><div id="chartDayStock" class="chart-wrap" style="height:350px"></div></div>`;
@@ -1657,18 +1637,29 @@ function renderStockView() {{
     if (recs.length === 0) {{ goBack(); return; }}
     const totalProfit = sumField(recs, 'profit');
     const totalBuy = sumField(recs, 'buyAmount');
+    const totalSell = sumField(recs, 'sellAmount');
     const totalRate = totalBuy > 0 ? totalProfit / totalBuy * 100 : 0;
     const tradeDays = unique(recs, 'date');
     const winCount = recs.filter(r => r.profit > 0).length;
+    const tComm = sumField(recs, 'commission');
+    const tStamp = sumField(recs, 'stampDuty');
+    const tCost = sumField(recs, 'totalCost');
     renderStats([
         {{label:'股票名称', value: stockName, cls:'neutral'}},
         {{label:'证券代码', value: recs[0].code, cls:'neutral'}},
-        {{label:'交易次数', value: recs.length, cls:'neutral'}},
         {{label:'交易天数', value: tradeDays.length, cls:'neutral'}},
+        {{label:'交易次数', value: recs.length, cls:'neutral'}},
         {{label:'盈利次数', value: winCount, cls:'profit'}},
+        {{label:'亏损次数', value: recs.length - winCount, cls:'loss'}},
+        {{label:'胜率', value: recs.length > 0 ? (winCount/recs.length*100).toFixed(1)+'%' : 'N/A', cls:'neutral'}},
+        {{label:'总买入金额', value: fmtMoney(totalBuy), cls:'neutral'}},
+        {{label:'总卖出金额', value: fmtMoney(totalSell), cls:'neutral'}},
+        {{label:'佣金合计', value: fmtMoney(tComm), cls:'neutral'}},
+        {{label:'印花税合计', value: fmtMoney(tStamp), cls:'neutral'}},
+        {{label:'交易成本合计', value: fmtMoney(tCost), cls:'neutral'}},
+        {{label:'平均每次盈亏', value: fmtMoney(totalProfit/recs.length,true), cls: profitCls(totalProfit)}},
         {{label:'总盈亏', value: fmtMoney(totalProfit,true), cls: profitCls(totalProfit)}},
         {{label:'总收益率', value: fmtPct(totalRate,true), cls: profitCls(totalRate)}},
-        {{label:'平均每次盈亏', value: fmtMoney(totalProfit/recs.length,true), cls: profitCls(totalProfit)}},
     ]);
     const dayGroups = groupBy(recs, 'date');
     const days = Object.keys(dayGroups).sort();
