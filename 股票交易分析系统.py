@@ -6,8 +6,8 @@
   2. 图片文件（手机App截图）— 文件名格式：YYYY-MM-DD-手机交易.png/.jpg/.jpeg
   3. 图片文件（平安证券截图）— 文件名格式：YYYYMMDD_平安.png
 作者：WorkBuddy
-版本：v4.2
-更新日期：2026-04-30
+版本：v4.3
+更新日期：2026-05-07
 
 使用说明：
 1. 将券商导出的Excel交易记录文件、手机App截图或平安证券截图放到当前文件夹
@@ -17,6 +17,7 @@
 5. Excel汇总文件支持去重更新（同日期+同来源的数据会覆盖）
 6. 汇总可视化报告支持时间筛选和多级数据钻取
 7. 同一天可以同时有Excel、手机截图和平安截图多种输入，数据会自动合并
+8. v4.3新增：佣金（万一/双向/最低5元）和印花税（万五/卖出单边）计算
 
 文件结构：
 - 当前文件夹：待处理的Excel文件和图片文件
@@ -42,6 +43,11 @@ HISTORY_DIR = 'history'                  # 原始文件归档文件夹
 # 确保文件夹存在
 os.makedirs(REPORTS_DIR, exist_ok=True)
 os.makedirs(HISTORY_DIR, exist_ok=True)
+
+# 交易成本配置
+COMMISSION_RATE = 0.0001      # 佣金费率：万一（0.01%），双向征收
+MIN_COMMISSION = 5             # 最低佣金：5元/笔
+STAMP_DUTY_RATE = 0.0005      # 印花税费率：万五（0.05%），仅卖出单边征收
 
 
 # ==================== 核心处理函数 ====================
@@ -751,8 +757,16 @@ def calculate_profits(df, buy_records, sell_records, trading_date, source):
         avg_sell_price = total_sell_amt / total_sell_qty
         matched_sell_amt = avg_sell_price * matched_qty
 
-        profit = matched_sell_amt - matched_buy_amt
-        profit_pct = (profit / matched_buy_amt) * 100 if matched_buy_amt != 0 else 0
+        profit = matched_sell_amt - matched_buy_amt  # 毛盈亏
+
+        # 交易成本计算
+        buy_commission = max(matched_buy_amt * COMMISSION_RATE, MIN_COMMISSION)
+        sell_commission = max(matched_sell_amt * COMMISSION_RATE, MIN_COMMISSION)
+        commission = round(buy_commission + sell_commission, 2)
+        stamp_duty = round(matched_sell_amt * STAMP_DUTY_RATE, 2)
+        total_cost = round(commission + stamp_duty, 2)
+        net_profit = round(profit - total_cost, 2)
+        profit_pct = (net_profit / matched_buy_amt) * 100 if matched_buy_amt != 0 else 0
 
         profit_results.append({
             '日期': trading_date,
@@ -766,14 +780,20 @@ def calculate_profits(df, buy_records, sell_records, trading_date, source):
             '卖出均价': round(avg_sell_price, 4),
             '买入金额': round(matched_buy_amt, 2),
             '卖出金额': round(matched_sell_amt, 2),
-            '盈亏金额': round(profit, 2),
+            '毛盈亏': round(profit, 2),
+            '佣金': commission,
+            '印花税': stamp_duty,
+            '交易成本': total_cost,
+            '盈亏金额': net_profit,
             '盈亏比例': f"{profit_pct:.2f}%"
         })
 
         print(f"股票：{stock_name} ({stock_code})")
         print(f"  买入：数量={total_buy_qty:.0f}, 均价={avg_buy_price:.4f}, 金额={matched_buy_amt:.2f}")
         print(f"  卖出：数量={total_sell_qty:.0f}, 均价={avg_sell_price:.4f}, 金额={matched_sell_amt:.2f}")
-        print(f"  盈亏：{profit:.2f} 元 ({profit_pct:.2f}%)")
+        print(f"  毛盈亏：{profit:.2f} 元")
+        print(f"  交易成本：佣金={commission:.2f}, 印花税={stamp_duty:.2f}, 合计={total_cost:.2f}")
+        print(f"  净盈亏：{net_profit:.2f} 元 ({profit_pct:.2f}%)")
 
     return profit_results
 
@@ -799,7 +819,8 @@ def append_to_excel(result_df, trading_date, source):
     ws.title = "股票盈亏汇总"
 
     headers = ['日期', '数据来源', '证券代码', '证券名称', '买入数量', '卖出数量', '匹配数量',
-               '买入均价', '卖出均价', '买入金额', '卖出金额', '盈亏金额', '盈亏比例']
+               '买入均价', '卖出均价', '买入金额', '卖出金额',
+               '毛盈亏', '佣金', '印花税', '交易成本', '盈亏金额', '盈亏比例']
 
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF", size=11)
@@ -823,18 +844,29 @@ def append_to_excel(result_df, trading_date, source):
         ws.cell(row=idx, column=10, value=row.买入金额)
         ws.cell(row=idx, column=11, value=row.卖出金额)
 
-        profit_cell = ws.cell(row=idx, column=12, value=row.盈亏金额)
+        # 毛盈亏
+        gross_cell = ws.cell(row=idx, column=12, value=row.毛盈亏)
+        if row.毛盈亏 > 0:
+            gross_cell.font = Font(color="FF0000", bold=True)
+        else:
+            gross_cell.font = Font(color="00B050", bold=True)
+
+        ws.cell(row=idx, column=13, value=row.佣金)
+        ws.cell(row=idx, column=14, value=row.印花税)
+        ws.cell(row=idx, column=15, value=row.交易成本)
+
+        profit_cell = ws.cell(row=idx, column=16, value=row.盈亏金额)
         if row.盈亏金额 > 0:
             profit_cell.font = Font(color="FF0000", bold=True)
         else:
             profit_cell.font = Font(color="00B050", bold=True)
 
-        ws.cell(row=idx, column=13, value=row.盈亏比例)
+        ws.cell(row=idx, column=17, value=row.盈亏比例)
 
-        for col in range(1, 14):
+        for col in range(1, 18):
             ws.cell(row=idx, column=col).alignment = Alignment(horizontal='center', vertical='center')
 
-    column_widths = [12, 12, 12, 14, 10, 10, 10, 12, 12, 14, 14, 14, 12]
+    column_widths = [12, 12, 12, 14, 10, 10, 10, 12, 12, 14, 14, 14, 12, 12, 12, 14, 12]
     for i, width in enumerate(column_widths, 1):
         ws.column_dimensions[chr(64+i)].width = width
 
@@ -862,6 +894,9 @@ def generate_html_report_from_summary(trading_date):
         return
 
     total_profit = day_df['盈亏金额'].sum()
+    total_commission = day_df['佣金'].sum() if '佣金' in day_df.columns else 0
+    total_stamp_duty = day_df['印花税'].sum() if '印花税' in day_df.columns else 0
+    total_cost = total_commission + total_stamp_duty
 
     # 按数据来源分组统计
     sources = day_df['数据来源'].unique()
@@ -966,17 +1001,19 @@ def generate_html_report_from_summary(trading_date):
         .source-手机 {{ background: #fff3e0; color: #f57c00; }}
         .source-平安 {{ background: #e8f5e9; color: #388e3c; }}
         /* 列宽设置 */
-        th:nth-child(1), td:nth-child(1) {{ width: 12%; }} /* 数据来源 */
-        th:nth-child(2), td:nth-child(2) {{ width: 18%; }} /* 证券名称 */
-        th:nth-child(3), td:nth-child(3) {{ width: 10%; }} /* 买入数量 */
-        th:nth-child(4), td:nth-child(4) {{ width: 10%; }} /* 卖出数量 */
-        th:nth-child(5), td:nth-child(5) {{ width: 10%; }} /* 匹配数量 */
-        th:nth-child(6), td:nth-child(6) {{ width: 12%; }} /* 买入均价 */
-        th:nth-child(7), td:nth-child(7) {{ width: 12%; }} /* 卖出均价 */
-        th:nth-child(8), td:nth-child(8) {{ width: 14%; }} /* 买入金额 */
-        th:nth-child(9), td:nth-child(9) {{ width: 14%; }} /* 卖出金额 */
-        th:nth-child(10), td:nth-child(10) {{ width: 16%; }} /* 盈亏金额 */
-        th:nth-child(11), td:nth-child(11) {{ width: 12%; }} /* 盈亏比例 */
+        th:nth-child(1), td:nth-child(1) {{ width: 10%; }} /* 数据来源 */
+        th:nth-child(2), td:nth-child(2) {{ width: 14%; }} /* 证券名称 */
+        th:nth-child(3), td:nth-child(3) {{ width: 8%; }} /* 买入数量 */
+        th:nth-child(4), td:nth-child(4) {{ width: 8%; }} /* 卖出数量 */
+        th:nth-child(5), td:nth-child(5) {{ width: 8%; }} /* 匹配数量 */
+        th:nth-child(6), td:nth-child(6) {{ width: 10%; }} /* 买入均价 */
+        th:nth-child(7), td:nth-child(7) {{ width: 10%; }} /* 卖出均价 */
+        th:nth-child(8), td:nth-child(8) {{ width: 11%; }} /* 买入金额 */
+        th:nth-child(9), td:nth-child(9) {{ width: 11%; }} /* 卖出金额 */
+        th:nth-child(10), td:nth-child(10) {{ width: 8%; }} /* 佣金 */
+        th:nth-child(11), td:nth-child(11) {{ width: 8%; }} /* 印花税 */
+        th:nth-child(12), td:nth-child(12) {{ width: 12%; }} /* 盈亏金额 */
+        th:nth-child(13), td:nth-child(13) {{ width: 10%; }} /* 盈亏比例 */
     </style>
 </head>
 <body>
@@ -998,6 +1035,18 @@ def generate_html_report_from_summary(trading_date):
             <div class="card">
                 <div class="title">总卖出金额</div>
                 <div class="value neutral">¥{day_df['卖出金额'].sum():,.2f}</div>
+            </div>
+            <div class="card">
+                <div class="title">佣金合计</div>
+                <div class="value neutral">¥{total_commission:,.2f}</div>
+            </div>
+            <div class="card">
+                <div class="title">印花税合计</div>
+                <div class="value neutral">¥{total_stamp_duty:,.2f}</div>
+            </div>
+            <div class="card">
+                <div class="title">交易成本合计</div>
+                <div class="value neutral">¥{total_cost:,.2f}</div>
             </div>
             <div class="card">
                 <div class="title">总盈亏金额</div>
@@ -1024,6 +1073,8 @@ def generate_html_report_from_summary(trading_date):
                         <th>卖出均价</th>
                         <th>买入金额</th>
                         <th>卖出金额</th>
+                        <th>佣金</th>
+                        <th>印花税</th>
                         <th>盈亏金额</th>
                         <th>盈亏比例</th>
                     </tr>
@@ -1033,6 +1084,8 @@ def generate_html_report_from_summary(trading_date):
         for _, row in day_df.iterrows():
             profit_class = 'profit-amount' if row['盈亏金额'] > 0 else 'loss-amount'
             profit_sign = '+' if row['盈亏金额'] > 0 else ''
+            commission_val = row['佣金'] if '佣金' in row.index else 0
+            stamp_val = row['印花税'] if '印花税' in row.index else 0
             html_content += f"""
                     <tr>
                         <td><span class="source-tag source-{row['数据来源'][:2]}">{row['数据来源']}</span></td>
@@ -1044,6 +1097,8 @@ def generate_html_report_from_summary(trading_date):
                         <td>¥{row['卖出均价']:,.4f}</td>
                         <td>¥{row['买入金额']:,.2f}</td>
                         <td>¥{row['卖出金额']:,.2f}</td>
+                        <td>¥{commission_val:,.2f}</td>
+                        <td>¥{stamp_val:,.2f}</td>
                         <td class="{profit_class}">{profit_sign}¥{row['盈亏金额']:,.2f}</td>
                         <td class="{profit_class}">{row['盈亏比例']}</td>
                     </tr>
@@ -1104,6 +1159,9 @@ def generate_summary_html():
             'sellPrice': round(float(row['卖出均价']), 4),
             'buyAmount': round(float(row['买入金额']), 2),
             'sellAmount': round(float(row['卖出金额']), 2),
+            'commission': round(float(row['佣金']), 2) if '佣金' in row.index else 0,
+            'stampDuty': round(float(row['印花税']), 2) if '印花税' in row.index else 0,
+            'totalCost': round(float(row['交易成本']), 2) if '交易成本' in row.index else 0,
             'profit': round(float(row['盈亏金额']), 2),
             'profitPct': str(row['盈亏比例'])
         })
@@ -1361,6 +1419,9 @@ function computeStats(recs) {{
     const stocks = unique(recs, 'name');
     const winCount = recs.filter(r => r.profit > 0).length;
     const loseCount = recs.filter(r => r.profit < 0).length;
+    const tComm = sumField(recs, 'commission');
+    const tStamp = sumField(recs, 'stampDuty');
+    const tCost = sumField(recs, 'totalCost');
     return [
         {{label:'交易天数', value:dates.length, cls:'neutral'}},
         {{label:'交易笔数', value:recs.length, cls:'neutral'}},
@@ -1370,6 +1431,9 @@ function computeStats(recs) {{
         {{label:'胜率', value: recs.length > 0 ? (winCount/recs.length*100).toFixed(1)+'%' : 'N/A', cls:'neutral'}},
         {{label:'总买入金额', value: fmtMoney(tb), cls:'neutral'}},
         {{label:'总卖出金额', value: fmtMoney(ts), cls:'neutral'}},
+        {{label:'佣金合计', value: fmtMoney(tComm), cls:'neutral'}},
+        {{label:'印花税合计', value: fmtMoney(tStamp), cls:'neutral'}},
+        {{label:'交易成本合计', value: fmtMoney(tCost), cls:'neutral'}},
         {{label:'总盈亏', value: fmtMoney(tp,true), cls: profitCls(tp)}},
         {{label:'总收益率', value: fmtPct(tr,true), cls: profitCls(tr)}},
     ];
@@ -1378,10 +1442,10 @@ function renderDetailTable(recs, title) {{
     const el = document.getElementById('detailSection');
     if (recs.length === 0) {{ el.innerHTML = ''; return; }}
     el.innerHTML = '<h2 class="chart-title" style="margin-bottom:14px">' + title + '</h2>' +
-        '<table class="detail-table"><thead><tr><th>日期</th><th>来源</th><th>证券名称</th><th>匹配数量</th><th>买入均价</th><th>卖出均价</th><th>买入金额</th><th>卖出金额</th><th>盈亏金额</th><th>盈亏比例</th></tr></thead><tbody>' +
+        '<table class="detail-table"><thead><tr><th>日期</th><th>来源</th><th>证券名称</th><th>匹配数量</th><th>买入均价</th><th>卖出均价</th><th>买入金额</th><th>卖出金额</th><th>佣金</th><th>印花税</th><th>盈亏金额</th><th>盈亏比例</th></tr></thead><tbody>' +
         recs.map(r => {{
             const pc = r.profit >= 0 ? 'profit-cell' : 'loss-cell';
-            return '<tr><td>' + r.date + '</td><td>' + r.source + '</td><td><b>' + r.name + '</b></td><td>' + r.matchQty + '</td><td>¥' + r.buyPrice.toFixed(4) + '</td><td>¥' + r.sellPrice.toFixed(4) + '</td><td>' + fmtMoney(r.buyAmount) + '</td><td>' + fmtMoney(r.sellAmount) + '</td><td class="' + pc + '">' + fmtMoney(r.profit,true) + '</td><td class="' + pc + '">' + r.profitPct + '</td></tr>';
+            return '<tr><td>' + r.date + '</td><td>' + r.source + '</td><td><b>' + r.name + '</b></td><td>' + r.matchQty + '</td><td>¥' + r.buyPrice.toFixed(4) + '</td><td>¥' + r.sellPrice.toFixed(4) + '</td><td>' + fmtMoney(r.buyAmount) + '</td><td>' + fmtMoney(r.sellAmount) + '</td><td>' + fmtMoney(r.commission) + '</td><td>' + fmtMoney(r.stampDuty) + '</td><td class="' + pc + '">' + fmtMoney(r.profit,true) + '</td><td class="' + pc + '">' + r.profitPct + '</td></tr>';
         }}).join('') + '</tbody></table>';
 }}
 function renderOverview() {{
@@ -1695,7 +1759,7 @@ def find_input_files():
 
 def main():
     print("\n" + "="*80)
-    print("股票交易盈亏分析系统 v4.2")
+    print("股票交易盈亏分析系统 v4.3")
     print("支持输入：Excel文件（券商导出）+ 图片文件（手机App截图/平安证券截图）")
     print("="*80)
 
