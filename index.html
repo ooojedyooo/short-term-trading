@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>短线交易分析</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Microsoft YaHei',sans-serif; background: linear-gradient(135deg,#667eea,#764ba2); min-height:100vh; display:flex; align-items:center; justify-content:center; }
+  .card { background:#fff; border-radius:16px; padding:40px; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.3); max-width:420px; width:90%; }
+  .card h1 { font-size:24px; color:#333; margin-bottom:8px; }
+  .card .sub { color:#999; font-size:14px; margin-bottom:24px; }
+  .card .btn { display:block; width:100%; padding:14px; margin:10px 0; border:none; border-radius:10px; font-size:16px; cursor:pointer; transition:transform .15s; color:#fff; }
+  .card .btn:hover { transform:scale(1.03); }
+  .btn-primary { background:linear-gradient(135deg,#667eea,#764ba2); }
+  .card .links { margin-top:20px; font-size:13px; color:#aaa; }
+  .card .links a { color:#667eea; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📊 短线交易分析</h1>
+  <p class="sub">股票交易盈亏汇总 · 可视化报告</p>
+  <button class="btn btn-primary" onclick="location.href='reports/%E6%B1%87%E6%80%BB%E5%8F%AF%E8%A7%86%E5%8C%96%E6%8A%A5%E5%91%8A.html'">📈 查看汇总报告</button>
+  <div class="links">
+    <p>报告自动更新 · 数据来源：交易记录</p>
+    <p><a href="https://github.com/ooojedyooo/short-term-trading">GitHub →</a></p>
+  </div>
+</div>
+<script>
+  setTimeout(function(){ location.href='reports/%E6%B1%87%E6%80%BB%E5%8F%AF%E8%A7%86%E5%8C%96%E6%8A%A5%E5%91%8A.html'; }, 1500);
+</script>
+</body>
+</html>
