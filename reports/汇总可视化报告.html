@@ -185,7 +185,7 @@ body {
     </div>
 
     <div class="footer">
-        <p>报告生成时间：2026-05-15 15:14:19 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
+        <p>报告生成时间：2026-05-15 15:25:27 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
     </div>
 </div>
 <script>
@@ -457,8 +457,10 @@ function renderStocksOverview() {
 
     html += '</tbody></table></div>';
 
-    // 个股盈亏柱状图
-    html += `<div style="margin-top:32px;"><h2 class="chart-title">📊 个股累计盈亏对比图</h2><div id="chartStockOverview" class="chart-wrap"></div></div>`;
+    // 个股盈亏柱状图（股票超过15只时，隐藏盈亏±50以内的票）
+    const chartStockList = stockList.length > 15 ? stockList.filter(s => Math.abs(s.totalProfit) > 50) : stockList;
+    const hiddenCount = stockList.length - chartStockList.length;
+    html += `<div style="margin-top:32px;"><h2 class="chart-title">📊 个股累计盈亏对比图${hiddenCount > 0 ? ' <span style="font-size:13px;color:#999;font-weight:normal">（已隐藏' + hiddenCount + '只盈亏±50元以内股票）</span>' : ''}</h2><div id="chartStockOverview" class="chart-wrap"></div></div>`;
     // 个股胜率对比
     html += `<div style="margin-top:32px;"><h2 class="chart-title">🎯 个股胜率对比</h2><div id="chartStockWinrate" class="chart-wrap"></div></div>`;
 
@@ -469,9 +471,9 @@ function renderStocksOverview() {
     sc.setOption({
         tooltip: { trigger:'axis', formatter: p => p[0].name+'<br/>累计盈亏：'+fmtMoney(p[0].value,true) },
         grid: { left:'3%', right:'4%', bottom:'15%', containLabel:true },
-        xAxis: { type:'category', data: stockList.map(s=>s.name), axisLabel:{color:'#555', rotate:30} },
+        xAxis: { type:'category', data: chartStockList.map(s=>s.name), axisLabel:{color:'#555', rotate:30} },
         yAxis: { type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
-        series: [{ type:'bar', data: stockList.map(s=>Math.round(s.totalProfit*100)/100), itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:10 } }]
+        series: [{ type:'bar', data: chartStockList.map(s=>Math.round(s.totalProfit*100)/100), itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:10 } }]
     });
     sc.on('click', p => { switchTab('overview'); setTimeout(()=>drillTo('stock',p.name),100); });
 
@@ -717,14 +719,21 @@ function renderOverview() {
         series: [{ type:'line', data: cumulative, smooth:true, itemStyle:{ color:'#667eea' }, areaStyle:{ color:{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(102,126,234,0.35)'},{offset:1,color:'rgba(102,126,234,0.02)'}]}}, markPoint:{ data: markPts }, markLine:{ data:[{type:'average',name:'平均'}] } }]
     });
     const sb = mkChart('chartStockBar');
+    // 股票超过15只时，隐藏盈亏±50以内的票
+    const sbList = stockList.length > 15 ? stockList.filter(s => Math.abs(s.profit) > 50) : stockList;
+    const sbHidden = stockList.length - sbList.length;
     sb.setOption({
         tooltip: { trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) },
         grid: { left:'3%', right:'4%', bottom:'15%', containLabel:true },
-        xAxis: { type:'category', data: stockList.map(s=>s.name), axisLabel:{color:'#555', rotate:30} },
+        xAxis: { type:'category', data: sbList.map(s=>s.name), axisLabel:{color:'#555', rotate:30} },
         yAxis: { type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
-        series: [{ type:'bar', data: stockList.map(s=>s.profit), itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:10 } }]
+        series: [{ type:'bar', data: sbList.map(s=>s.profit), itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:10 } }]
     });
     sb.on('click', p => drillTo('stock', p.name));
+    if (sbHidden > 0) {
+        const sbTitle = document.querySelector('#chartStockBar').closest('.chart-section').querySelector('.chart-title');
+        if (sbTitle) sbTitle.innerHTML += ' <span style="font-size:13px;color:#999;font-weight:normal">（已隐藏' + sbHidden + '只盈亏±50元以内股票）</span>';
+    }
     const sp = mkChart('chartStockPie');
     const winStocks = stockList.filter(s => s.profit > 0);
     const loseStocks = stockList.filter(s => s.profit < 0);
@@ -790,14 +799,21 @@ function renderMonthView() {
     });
     dc.on('click', p => drillTo('day', month + '-' + p.name));
     const msc = mkChart('chartMonthStock');
+    // 股票超过15只时，隐藏盈亏±50以内的票
+    const mscList = stockList.length > 15 ? stockList.filter(s => Math.abs(s.profit) > 50) : stockList;
+    const mscHidden = stockList.length - mscList.length;
     msc.setOption({
         tooltip:{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true)+'<br/>交易次数：'+stockGroups[p[0].name].length },
         grid:{ left:'3%', right:'4%', bottom:'15%', containLabel:true },
-        xAxis:{ type:'category', data: stockList.map(s=>s.name), axisLabel:{color:'#555', rotate:30} },
+        xAxis:{ type:'category', data: mscList.map(s=>s.name), axisLabel:{color:'#555', rotate:30} },
         yAxis:{ type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
-        series:[{ type:'bar', data: stockList.map(s=>s.profit), itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 } }]
+        series:[{ type:'bar', data: mscList.map(s=>s.profit), itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 } }]
     });
     msc.on('click', p => drillTo('stock', p.name));
+    if (mscHidden > 0) {
+        const mscTitle = document.querySelector('#chartMonthStock').closest('.chart-section').querySelector('.chart-title');
+        if (mscTitle) mscTitle.innerHTML += ' <span style="font-size:13px;color:#999;font-weight:normal">（已隐藏' + mscHidden + '只盈亏±50元以内股票）</span>';
+    }
     const ccc = mkChart('chartMonthCum');
     ccc.setOption({
         tooltip:{ trigger:'axis', formatter: p => p[0].name+'<br/>累计：'+fmtMoney(p[0].value,true) },
