@@ -184,27 +184,63 @@ def parse_image_trades(image_path):
         numbers = re.findall(r'\d+\.?\d*', numbers_text)
         numbers = [float(n) for n in numbers if float(n) > 0]
 
-        if len(numbers) < 3:
+        # 过滤掉时间戳中的数字（格式 HH:MM:SS 会被拆成3个小数）
+        # 时间数字特征：<=59的整数，且连续3个出现
+        time_indices = set()
+        for i in range(len(numbers) - 2):
+            if (numbers[i] <= 59 and numbers[i] == int(numbers[i]) and
+                numbers[i+1] <= 59 and numbers[i+1] == int(numbers[i+1]) and
+                numbers[i+2] <= 59 and numbers[i+2] == int(numbers[i+2])):
+                time_indices.update([i, i+1, i+2])
+        clean_numbers = [n for i, n in enumerate(numbers) if i not in time_indices]
+
+        if len(clean_numbers) < 2:
+            # 有效数字太少（可能只有残缺信息），跳过此行
             continue
+
+        # 识别成交金额（最大值）
+        amount = max(clean_numbers)
 
         # 识别成交量（整数且>=100）
         volume = None
-        for n in sorted(numbers):
-            if n >= 100 and n == int(n):
+        for n in sorted(clean_numbers):
+            if n >= 100 and n == int(n) and n != amount:
                 volume = int(n)
                 break
-        if volume is None:
-            volume = int(min(numbers))
 
-        # 识别成交金额（最大值）
-        amount = max(numbers)
+        # 识别成交价：金额之外的、合理范围内的数字
+        # 价格应满足：大于0，小于金额，不等于已识别的数量
+        price = None
+        price_candidates = [n for n in clean_numbers if n != amount and n != volume and n > 0 and n < amount]
+        if price_candidates:
+            # 优先选最接近 amount/100 的值（假设100股为常见手数）
+            if volume:
+                target = amount / volume
+                price = min(price_candidates, key=lambda n: abs(n - target))
+            else:
+                # 无volume时，选金额之外最大的非整数数字（金额通常是整数，价格有小数）
+                decimal_prices = [n for n in price_candidates if n != int(n)]
+                if decimal_prices:
+                    price = max(decimal_prices)
+                else:
+                    price = max(price_candidates)
 
-        # 识别成交价
-        price = round(amount / volume, 3) if volume > 0 else 0
-        for n in numbers:
-            if n != amount and n != volume and abs(n - price) < 1:
-                price = n
-                break
+        # 如果有金额和价格，用它们反推/修正成交量
+        if amount and price and price > 0 and price < amount:
+            calc_volume = round(amount / price)
+            if calc_volume >= 1:
+                if volume is None:
+                    # 成交量丢失，用金额/价格反推
+                    volume = calc_volume
+                elif abs(volume - calc_volume) > max(1, calc_volume * 0.05):
+                    # 成交量偏差超过5%，说明OCR识别不准，用反推值修正
+                    # 例如 OCR把100识别成96，但金额/价格反推是100
+                    volume = calc_volume
+
+        # 仍无成交量或反推成交量不合理时跳过
+        # 如果金额/价格反推出极小值（<10股），说明这条记录的金额或价格OCR识别有误
+        if volume is None or (not any(n >= 100 and n == int(n) and n != amount for n in clean_numbers) and volume < 10):
+            continue
 
         raw_records.append({
             '证券代码': stock_code,
@@ -243,6 +279,38 @@ def parse_image_trades(image_path):
                 rec['证券名称'] = best_names[code]
             else:
                 rec['证券名称'] = '未知'
+
+    # OCR数量修正：对同一股票同一方向，如果某条记录的数量不是100的整数倍，
+    # 检查同股票同方向的其他记录均价，如果修正后金额合理则修正
+    for code in set(r['证券代码'] for r in raw_records):
+        for direction in ['证券买入', '证券卖出']:
+            recs = [r for r in raw_records if r['证券代码'] == code and r['买卖类别'] == direction]
+            if len(recs) == 0:
+                continue
+
+            # 收集同方向100整数倍的记录的均价，作为参考
+            ref_prices = [r['成交价格'] for r in recs if r['成交数量'] % 100 == 0 and r['成交价格'] > 0]
+
+            for rec in recs:
+                qty = rec['成交数量']
+                price = rec['成交价格']
+                if qty % 100 != 0 and qty > 0:
+                    nearest_100 = round(qty / 100) * 100
+                    if nearest_100 <= 0:
+                        continue
+
+                    # 验证方式1：如果价格在参考均价范围内，用修正后的量重算金额
+                    if ref_prices:
+                        avg_ref = sum(ref_prices) / len(ref_prices)
+                        if abs(price - avg_ref) / avg_ref < 0.05:  # 价格偏差<5%
+                            rec['成交数量'] = nearest_100
+                            rec['成交金额'] = round(price * nearest_100, 2)
+                    else:
+                        # 无参考均价，仅当偏差很小时修正（如96→100，偏差<5%）
+                        if abs(nearest_100 - qty) / qty < 0.05:
+                            rec['成交数量'] = nearest_100
+                            rec['成交金额'] = round(price * nearest_100, 2)
+                            rec['成交价格'] = round(rec['成交金额'] / nearest_100, 4)
 
     # 去重：同一方向+同一代码+同一数量+同一金额视为重复
     seen = set()
