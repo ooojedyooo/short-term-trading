@@ -134,6 +134,39 @@ def parse_image_trades(image_path):
     for row in rows:
         row.sort(key=lambda r: r['x'])
 
+    # 检测并拆分合并行：当y_threshold=40把多笔逐笔成交合并到一行时，
+    # 该行会包含多个股票代码或多个买卖方向关键词，用更紧阈值(20px)重新拆分
+    new_rows = []
+    for row in rows:
+        texts = [r['text'] for r in row]
+        text_combined = ' '.join(texts)
+        code_count = len(re.findall(r'\b\d{6}\b', text_combined))
+        dir_count = text_combined.count('买入') + text_combined.count('卖出')
+
+        if code_count >= 2 or dir_count >= 2:
+            # 合并行检测：用更紧阈值(20px)重新拆分
+            row_sorted = sorted(row, key=lambda r: r['y'])
+            sub_rows = []
+            cur = []
+            last_y2 = None
+            for item in row_sorted:
+                if last_y2 is None or abs(item['y'] - last_y2) <= 20:
+                    cur.append(item)
+                else:
+                    if cur:
+                        sub_rows.append(cur)
+                    cur = [item]
+                last_y2 = item['y']
+            if cur:
+                sub_rows.append(cur)
+            new_rows.extend(sub_rows)
+        else:
+            new_rows.append(row)
+
+    rows = new_rows
+    for row in rows:
+        row.sort(key=lambda r: r['x'])
+
     # 第二步：从每行提取关键信息
     raw_records = []
     for row in rows:
@@ -312,11 +345,12 @@ def parse_image_trades(image_path):
                             rec['成交金额'] = round(price * nearest_100, 2)
                             rec['成交价格'] = round(rec['成交金额'] / nearest_100, 4)
 
-    # 去重：同一方向+同一代码+同一数量+同一金额视为重复
+    # 去重：同一y位置+同一方向+同一代码+同一数量+同一金额视为OCR重复读取
+    # y位置用于区分同一股票多笔逐笔成交（同价同量不同行）与OCR重复读取（同行同量）
     seen = set()
     unique_records = []
     for rec in raw_records:
-        key = (rec['证券代码'], rec['买卖类别'], rec['成交数量'], rec['成交金额'])
+        key = (rec['证券代码'], rec['买卖类别'], rec['成交数量'], rec['成交金额'], round(rec.get('y', 0), 1))
         if key not in seen:
             seen.add(key)
             unique_records.append({
