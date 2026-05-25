@@ -113,11 +113,11 @@ def parse_image_trades(image_path):
 
     items.sort(key=lambda r: r['y'])
 
-    # 第一步：按y坐标分组（行间距阈值40px，更宽松）
+    # 第一步：按y坐标分组（行间距阈值30px，支持逐笔成交分离）
     rows = []
     current_row = []
     last_y = None
-    y_threshold = 40
+    y_threshold = 30
 
     for item in items:
         if last_y is None or abs(item['y'] - last_y) <= y_threshold:
@@ -134,36 +134,6 @@ def parse_image_trades(image_path):
     for row in rows:
         row.sort(key=lambda r: r['x'])
 
-    # 检测并拆分合并行：当y_threshold=40把多笔逐笔成交合并到一行时，
-    # 该行会包含多个股票代码或多个买卖方向关键词，用更紧阈值(20px)重新拆分
-    new_rows = []
-    for row in rows:
-        texts = [r['text'] for r in row]
-        text_combined = ' '.join(texts)
-        code_count = len(re.findall(r'\b\d{6}\b', text_combined))
-        dir_count = text_combined.count('买入') + text_combined.count('卖出')
-
-        if code_count >= 2 or dir_count >= 2:
-            # 合并行检测：用更紧阈值(20px)重新拆分
-            row_sorted = sorted(row, key=lambda r: r['y'])
-            sub_rows = []
-            cur = []
-            last_y2 = None
-            for item in row_sorted:
-                if last_y2 is None or abs(item['y'] - last_y2) <= 20:
-                    cur.append(item)
-                else:
-                    if cur:
-                        sub_rows.append(cur)
-                    cur = [item]
-                last_y2 = item['y']
-            if cur:
-                sub_rows.append(cur)
-            new_rows.extend(sub_rows)
-        else:
-            new_rows.append(row)
-
-    rows = new_rows
     for row in rows:
         row.sort(key=lambda r: r['x'])
 
