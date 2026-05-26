@@ -83,6 +83,30 @@ def get_source_from_filename(filename):
 
 # ==================== 图片OCR解析 ====================
 
+# OCR名称修正映射表（OCR经常截断/误读股票名称，用此表修正）
+STOCK_NAME_CORRECTIONS = {
+    '688503': '聚和材料',   # OCR常读成"聚和材"缺"料"
+    '688041': '海光信息',
+    '300502': '新易盛',
+    '688025': '杰普特',
+    '300308': '中际旭创',
+    '002436': '兴森科技',
+    '600498': '烽火通信',
+    '688035': '德邦科技',
+    '002594': '比亚迪',
+    '300750': '宁德时代',
+    '300394': '天孚通信',
+    '688256': '寒武纪',
+    '300014': '亿纬锂能',
+    '002156': '通富微电',
+    '688062': '迈威生物',
+    '300660': '江苏雷利',
+    '688778': '厦钨新能',
+    '300450': '先导智能',
+    '601208': '东材科技',
+}
+
+
 def parse_image_trades(image_path):
     """用手机App截图识别交易记录 - v2.0 改进版
     策略：不按行分组，而是提取所有关键信息后按股票代码聚合
@@ -282,38 +306,36 @@ def parse_image_trades(image_path):
                 rec['证券名称'] = best_names[code]
             else:
                 rec['证券名称'] = '未知'
+        # 用名称修正表覆盖OCR截断/误读的名称
+        if code in STOCK_NAME_CORRECTIONS:
+            rec['证券名称'] = STOCK_NAME_CORRECTIONS[code]
 
-    # OCR数量修正：对同一股票同一方向，如果某条记录的数量不是100的整数倍，
-    # 检查同股票同方向的其他记录均价，如果修正后金额合理则修正
+    # OCR数量修正 v4.5.2：用"数量×价格≈金额"来验证OCR读数准确性
+    # 如果OCR读的数量不是100整数倍，且用最近100整数倍算出的金额更接近OCR读的金额，则修正
     for code in set(r['证券代码'] for r in raw_records):
         for direction in ['证券买入', '证券卖出']:
             recs = [r for r in raw_records if r['证券代码'] == code and r['买卖类别'] == direction]
             if len(recs) == 0:
                 continue
 
-            # 收集同方向100整数倍的记录的均价，作为参考
-            ref_prices = [r['成交价格'] for r in recs if r['成交数量'] % 100 == 0 and r['成交价格'] > 0]
-
             for rec in recs:
                 qty = rec['成交数量']
                 price = rec['成交价格']
-                if qty % 100 != 0 and qty > 0:
+                amount = rec['成交金额']
+                if qty % 100 != 0 and qty > 0 and price and amount:
                     nearest_100 = round(qty / 100) * 100
                     if nearest_100 <= 0:
                         continue
-
-                    # 验证方式1：如果价格在参考均价范围内，用修正后的量重算金额
-                    if ref_prices:
-                        avg_ref = sum(ref_prices) / len(ref_prices)
-                        if abs(price - avg_ref) / avg_ref < 0.05:  # 价格偏差<5%
-                            rec['成交数量'] = nearest_100
-                            rec['成交金额'] = round(price * nearest_100, 2)
-                    else:
-                        # 无参考均价，仅当偏差很小时修正（如96→100，偏差<5%）
-                        if abs(nearest_100 - qty) / qty < 0.05:
-                            rec['成交数量'] = nearest_100
-                            rec['成交金额'] = round(price * nearest_100, 2)
-                            rec['成交价格'] = round(rec['成交金额'] / nearest_100, 4)
+                    # 计算两种假设下的"金额误差"
+                    error_current = abs(qty * price - amount)
+                    error_corrected = abs(nearest_100 * price - amount)
+                    # 如果修正后误差更小，采纳修正值
+                    if error_corrected < error_current * 0.5:  # 修正后误差不到原来的一半
+                        rec['成交数量'] = nearest_100
+                        rec['成交金额'] = round(price * nearest_100, 2)
+                    elif abs(nearest_100 - qty) / qty < 0.10:  # 偏差<10%且修正后金额合理
+                        rec['成交数量'] = nearest_100
+                        rec['成交金额'] = round(price * nearest_100, 2)
 
     # 去重：同一y位置+同一方向+同一代码+同一数量+同一金额视为OCR重复读取
     # y位置用于区分同一股票多笔逐笔成交（同价同量不同行）与OCR重复读取（同行同量）
