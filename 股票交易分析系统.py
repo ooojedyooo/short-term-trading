@@ -2349,6 +2349,10 @@ def find_input_files():
 # ==================== 主程序 ====================
 
 def main():
+    # 修复Windows终端emoji打印乱码/编码错误
+    import io, sys
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
     print("\n" + "="*80)
     print("股票交易盈亏分析系统 v4.5")
     print("支持输入：Excel文件（券商导出）+ 图片文件（手机App截图/平安证券截图）")
