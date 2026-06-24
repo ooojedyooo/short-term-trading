@@ -31,6 +31,7 @@
 import pandas as pd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 from datetime import datetime
 import os
 import shutil
@@ -154,9 +155,6 @@ def parse_image_trades(image_path):
 
     if current_row:
         rows.append(current_row)
-
-    for row in rows:
-        row.sort(key=lambda r: r['x'])
 
     for row in rows:
         row.sort(key=lambda r: r['x'])
@@ -1074,10 +1072,10 @@ def append_to_excel(result_df, trading_date, source):
 
     column_widths = [12, 12, 12, 14, 10, 10, 10, 12, 12, 14, 14, 14, 12, 12, 12, 14, 12]
     for i, width in enumerate(column_widths, 1):
-        ws.column_dimensions[chr(64+i)].width = width
+        ws.column_dimensions[get_column_letter(i)].width = width
 
-    wb.save(EXCEL_OUTPUT)
     action = "更新" if os.path.exists(EXCEL_OUTPUT) else "创建"
+    wb.save(EXCEL_OUTPUT)
     print(f"Excel汇总已{action}（按日期去重，整日替换）：{EXCEL_OUTPUT}")
 
 
@@ -2404,6 +2402,7 @@ def main():
         all_sell_records = []
         all_stock_info = {}  # code -> name
         file_sources = set()
+        processed_files = []  # 记录已成功解析的文件，全部成功后再归档
 
         # 处理Excel文件：先解析，收集买卖记录
         for excel_file in date_files['excel']:
@@ -2440,9 +2439,10 @@ def main():
                         all_stock_info[code] = name
 
                 print(f"  [{source}] Excel解析完成：买入{len(buy_records)}笔，卖出{len(sell_records)}笔")
-                archive_file(excel_file)
+                processed_files.append(excel_file)
             except Exception as e:
                 print(f"\n[错误] 处理Excel文件 {excel_file} 时出错：{str(e)}")
+                print(f"  文件未归档，可修正后重跑")
                 continue
 
         # 处理图片文件：先解析，收集买卖记录
@@ -2456,7 +2456,6 @@ def main():
 
                 if len(df) == 0:
                     print(f"  [{source}] 图片未识别到有效交易记录")
-                    archive_file(image_file)
                     continue
 
                 buy_records = df[df['买卖类别'].str.contains('证券买入', na=False)].copy()
@@ -2478,9 +2477,10 @@ def main():
                         all_stock_info[code] = name
 
                 print(f"  [{source}] 图片解析完成：买入{len(buy_records)}笔，卖出{len(sell_records)}笔")
-                archive_file(image_file)
+                processed_files.append(image_file)
             except Exception as e:
                 print(f"\n[错误] 处理图片文件 {image_file} 时出错：{str(e)}")
+                print(f"  文件未归档，可修正后重跑")
                 continue
 
         # 合并所有买卖记录，统一跨账户匹配
@@ -2515,6 +2515,10 @@ def main():
         # 从汇总文件提取当日全部数据生成单日报告
         generate_html_report_from_summary(trading_date)
         processed_dates.append(trading_date)
+
+        # 全部处理成功后才归档原始文件
+        for f in processed_files:
+            archive_file(f)
 
         print(f"\n日期 {trading_date} 处理完成")
 
