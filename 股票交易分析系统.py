@@ -42,10 +42,13 @@ import re
 EXCEL_OUTPUT = '股票交易盈亏汇总.xlsx'  # Excel汇总文件
 REPORTS_DIR = 'reports'                  # HTML报告文件夹
 HISTORY_DIR = 'history'                  # 原始文件归档文件夹
+TEMPLATES_DIR = os.path.join(REPORTS_DIR, 'templates')  # HTML模板文件夹
+SUMMARY_TEMPLATE = os.path.join(TEMPLATES_DIR, 'summary_report.html')  # 汇总报告模板
 
 # 确保文件夹存在
 os.makedirs(REPORTS_DIR, exist_ok=True)
 os.makedirs(HISTORY_DIR, exist_ok=True)
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
 # 交易成本配置
 COMMISSION_RATE = 0.0001      # 佣金费率：万一（0.01%），双向征收
@@ -83,6 +86,18 @@ def get_source_from_filename(filename):
 
 
 # ==================== 图片OCR解析 ====================
+
+# OCR Reader单例（避免每次解析图片都重新加载模型，省3-5秒/次）
+_OCR_READER = None
+
+def get_ocr_reader():
+    """获取easyocr Reader单例，首次调用时加载模型，后续复用"""
+    global _OCR_READER
+    if _OCR_READER is None:
+        import easyocr
+        _OCR_READER = easyocr.Reader(['ch_sim', 'en'], gpu=False, verbose=False)
+    return _OCR_READER
+
 
 # OCR名称修正映射表（OCR经常截断/误读股票名称，用此表修正）
 STOCK_NAME_CORRECTIONS = {
@@ -126,7 +141,7 @@ def parse_image_trades(image_path):
         return pd.DataFrame()
 
     print(f"  正在识别图片：{os.path.basename(image_path)}")
-    reader = easyocr.Reader(['ch_sim', 'en'], gpu=False, verbose=False)
+    reader = get_ocr_reader()
     result = reader.readtext(image_path)
 
     # 提取所有文本项，保留位置信息
@@ -460,7 +475,7 @@ def parse_pingan_image_trades(image_path):
     from PIL import Image
 
     print(f"  正在识别平安截图：{os.path.basename(image_path)}")
-    reader = easyocr.Reader(['ch_sim', 'en'], gpu=False, verbose=False)
+    reader = get_ocr_reader()
 
     # 使用PIL读取并通过numpy传给easyocr（避免OpenCV路径问题）
     img = Image.open(image_path)
@@ -819,6 +834,64 @@ def process_excel_file(input_file):
 
     result_df = pd.DataFrame(profit_results)
     return result_df, trading_date, total_profit, source
+
+
+def validate_trades(df, source_tag=''):
+    """数据校验：检查交易记录合理性，打印告警但不阻断流程
+    返回清洗后的df（剔除严重异常行）
+    """
+    if len(df) == 0:
+        return df
+
+    warnings = []
+    drop_indices = []
+
+    for idx, row in df.iterrows():
+        code = str(row.get('证券代码', ''))
+        name = str(row.get('证券名称', ''))
+        qty = row.get('成交数量', 0)
+        price = row.get('成交价格', 0)
+        amount = row.get('成交金额', 0)
+        direction = str(row.get('买卖类别', ''))
+
+        # 1. 代码长度校验
+        if len(code) != 6 or not code.isdigit():
+            warnings.append(f"  [异常] {name}({code}) 代码格式不正确")
+            drop_indices.append(idx)
+            continue
+
+        # 2. 数量校验
+        if qty is None or qty <= 0:
+            warnings.append(f"  [异常] {name}({code}) {direction} 数量={qty}，已剔除")
+            drop_indices.append(idx)
+            continue
+
+        # 3. 价格校验
+        if price is not None and (price <= 0 or price > 10000):
+            warnings.append(f"  [告警] {name}({code}) {direction} 价格={price} 异常")
+
+        # 4. 金额校验：金额 ≈ 数量 × 价格
+        if price is not None and price > 0 and amount is not None and amount > 0:
+            expected = qty * price
+            if abs(expected - amount) / max(amount, 1) > 0.05:
+                warnings.append(f"  [告警] {name}({code}) {direction} 金额={amount} 但 数量×价格={expected:.2f}，偏差>5%")
+
+        # 5. 数量非100整数倍（A股主板100股/手，科创板200股起）
+        if qty > 0 and qty % 100 != 0:
+            warnings.append(f"  [提示] {name}({code}) {direction} 数量={qty} 非100整数倍（可能是科创板200股起 or OCR误读）")
+
+    if warnings:
+        prefix = f"[{source_tag}] " if source_tag else ""
+        print(f"\n  {prefix}--- 数据校验告警 ({len(warnings)}条) ---")
+        for w in warnings:
+            print(w)
+
+    # 剔除严重异常行
+    if drop_indices:
+        df = df.drop(index=drop_indices).reset_index(drop=True)
+        print(f"  已剔除 {len(drop_indices)} 条异常记录")
+
+    return df
 
 
 def calculate_profits(df, buy_records, sell_records, trading_date, source):
@@ -1375,942 +1448,22 @@ def generate_summary_html():
     gen_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     html_path = os.path.join(REPORTS_DIR, '汇总可视化报告.html')
 
-    html_content = generate_html_template(data_json, now_str, gen_time)
+    # 读取独立模板文件并注入数据（模板中用 {{__VAR__}} 标记占位符）
+    if not os.path.exists(SUMMARY_TEMPLATE):
+        print(f"[错误] 汇总报告模板不存在：{SUMMARY_TEMPLATE}")
+        return
+    with open(SUMMARY_TEMPLATE, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    html_content = html_content.replace('{__DATA_JSON__}', data_json)
+    html_content = html_content.replace('{__NOW_STR__}', now_str)
+    html_content = html_content.replace('{__GEN_TIME__}', gen_time)
 
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     print(f"汇总可视化报告已生成：{html_path}")
 
 
-def generate_html_template(data_json, now_str, gen_time):
-    """生成HTML模板（v4.0 — 新增个股总览+盈亏日历标签页）"""
-    return f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>股票交易汇总分析</title>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    <style>
-* {{ margin:0; padding:0; box-sizing:border-box; }}
-body {{
-    font-family: 'Microsoft YaHei','SimHei',Arial,sans-serif;
-    background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
-    padding: 20px; min-height: 100vh;
-}}
-.container {{
-    max-width: 1400px; margin: 0 auto; background: #fff;
-    border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden;
-}}
-.header {{
-    background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
-    color: #fff; padding: 30px 40px; display: flex; align-items: center; justify-content: space-between;
-}}
-.header h1 {{ font-size: 28px; font-weight: 600; }}
-.header .subtitle {{ font-size: 14px; opacity: 0.85; margin-top: 4px; }}
-/* 标签页导航 */
-.tab-nav {{
-    display: flex; background: #f0f2f5; border-bottom: 2px solid #e0e0e0; padding: 0 30px;
-}}
-.tab-btn {{
-    padding: 14px 28px; font-size: 15px; font-weight: 600; color: #666;
-    background: transparent; border: none; border-bottom: 3px solid transparent;
-    cursor: pointer; transition: all 0.2s; position: relative; top: 2px;
-}}
-.tab-btn:hover {{ color: #667eea; }}
-.tab-btn.active {{ color: #667eea; border-bottom-color: #667eea; background: #fff; }}
-.filter-bar {{
-    display: flex; align-items: center; gap: 10px; padding: 16px 30px;
-    background: #f0f2f5; border-bottom: 1px solid #e0e0e0; flex-wrap: wrap;
-}}
-.filter-bar label {{ font-size: 14px; color: #555; font-weight: 600; margin-right: 4px; }}
-.filter-btn {{
-    padding: 6px 16px; border: 1px solid #ccc; border-radius: 20px;
-    background: #fff; color: #555; cursor: pointer; font-size: 13px;
-    transition: all 0.2s;
-}}
-.filter-btn:hover {{ border-color: #667eea; color: #667eea; }}
-.filter-btn.active {{ background: #667eea; color: #fff; border-color: #667eea; }}
-.custom-date {{
-    display: none; align-items: center; gap: 6px;
-}}
-.custom-date.show {{ display: flex; }}
-.custom-date input {{
-    padding: 5px 10px; border: 1px solid #ccc; border-radius: 6px;
-    font-size: 13px; outline: none;
-}}
-.custom-date input:focus {{ border-color: #667eea; }}
-.custom-date button {{
-    padding: 5px 14px; background: #667eea; color: #fff; border: none;
-    border-radius: 6px; cursor: pointer; font-size: 13px;
-}}
-.breadcrumb {{
-    padding: 12px 30px; background: #fafbfc; border-bottom: 1px solid #eee;
-    display: flex; align-items: center; gap: 8px; font-size: 14px;
-}}
-.breadcrumb span {{ color: #999; cursor: pointer; }}
-.breadcrumb span:hover {{ color: #667eea; }}
-.breadcrumb span.current {{ color: #333; font-weight: 600; cursor: default; }}
-.breadcrumb .sep {{ color: #ccc; }}
-.stats-grid {{
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px; padding: 24px 30px; background: #f8f9fa;
-}}
-.stat-card {{
-    background: #fff; padding: 20px; border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08); text-align: center;
-}}
-.stat-card .label {{ color: #888; font-size: 13px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }}
-.stat-card .value {{ font-size: 24px; font-weight: bold; }}
-.stat-card .value.profit {{ color: #e74c3c; }}
-.stat-card .value.loss {{ color: #27ae60; }}
-.stat-card .value.neutral {{ color: #3498db; }}
-.charts-area {{ padding: 24px 30px; }}
-.chart-section {{ margin-bottom: 32px; }}
-.chart-title {{
-    font-size: 20px; color: #2c3e50; margin-bottom: 14px;
-    padding-left: 12px; border-left: 4px solid #667eea;
-}}
-.chart-wrap {{ width: 100%; height: 420px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }}
-.two-charts {{ display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }}
-.two-charts .chart-wrap {{ height: 380px; }}
-.detail-section {{ padding: 0 30px 30px; }}
-.detail-table {{
-    width: 100%; border-collapse: collapse; font-size: 14px;
-    border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}}
-.detail-table thead {{ background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); }}
-.detail-table th {{ color: #fff; padding: 12px 8px; text-align: center; font-size: 13px; }}
-.detail-table td {{ padding: 10px 8px; text-align: center; border-bottom: 1px solid #f0f0f0; }}
-.detail-table tbody tr:hover {{ background: #f8f9fa; }}
-.detail-table .profit-cell {{ color: #e74c3c; font-weight: 600; }}
-.detail-table .loss-cell {{ color: #27ae60; font-weight: 600; }}
-/* 个股总览表格 */
-.stock-overview-table {{
-    width: 100%; border-collapse: collapse; font-size: 14px;
-    border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}}
-.stock-overview-table thead {{ background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); }}
-.stock-overview-table th {{ color: #fff; padding: 14px 10px; text-align: center; font-size: 13px; white-space: nowrap; }}
-.stock-overview-table td {{ padding: 12px 10px; text-align: center; border-bottom: 1px solid #f0f0f0; }}
-.stock-overview-table tbody tr {{ cursor: pointer; transition: background 0.15s; }}
-.stock-overview-table tbody tr:hover {{ background: #f0f4ff; }}
-.stock-overview-table .stock-name {{ font-weight: 700; font-size: 15px; }}
-.stock-overview-table .rank {{ font-weight: 700; font-size: 16px; color: #667eea; }}
-/* 胜率进度条 */
-.winrate-bar {{
-    display: inline-block; width: 60px; height: 8px; background: #e0e0e0;
-    border-radius: 4px; overflow: hidden; vertical-align: middle; margin-right: 6px;
-}}
-.winrate-fill {{ height: 100%; border-radius: 4px; background: #667eea; }}
-/* 盈亏热力条 */
-.profit-bar {{
-    display: inline-block; width: 80px; height: 10px; background: #f0f0f0;
-    border-radius: 5px; overflow: hidden; vertical-align: middle; margin-right: 6px;
-}}
-.profit-bar-fill {{ height: 100%; border-radius: 5px; }}
-.empty-state {{ text-align: center; padding: 60px 20px; color: #aaa; font-size: 16px; }}
-.footer {{
-    padding: 16px; text-align: center; color: #999; font-size: 13px;
-    background: #f8f9fa; border-top: 1px solid #eee;
-}}
-/* 页面容器 */
-.page-container {{ display: none; }}
-.page-container.active {{ display: block; }}
-@media (max-width: 768px) {{
-    .two-charts {{ grid-template-columns: 1fr; }}
-    .header {{ flex-direction: column; gap: 10px; text-align: center; }}
-    .stats-grid {{ grid-template-columns: repeat(2, 1fr); }}
-    .filter-bar {{ justify-content: center; }}
-    .tab-nav {{ overflow-x: auto; }}
-    .tab-btn {{ padding: 12px 16px; font-size: 14px; }}
-}}
-    </style>
-</head>
-<body>
-<div class="container">
-    <div class="header">
-        <div>
-            <h1>📊 股票交易汇总分析</h1>
-            <div class="subtitle">点击图表数据项可钻取下级明细 · 个股总览 · 盈亏日历</div>
-        </div>
-    </div>
-    <!-- 标签页导航 -->
-    <div class="tab-nav">
-        <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">📈 汇总概览</button>
-        <button class="tab-btn" data-tab="stocks" onclick="switchTab('stocks')">🏆 个股总览</button>
-        <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">📅 盈亏日历</button>
-    </div>
-    <!-- 筛选条 -->
-    <div class="filter-bar">
-        <label>时间范围：</label>
-        <button class="filter-btn active" data-type="mtd" onclick="setFilter('mtd')">本月</button>
-        <button class="filter-btn" data-type="ytd" onclick="setFilter('ytd')">本年</button>
-        <button class="filter-btn" data-type="all" onclick="setFilter('all')">全部</button>
-        <button class="filter-btn" data-type="custom" onclick="setFilter('custom')">自定义</button>
-        <div class="custom-date" id="customDate">
-            <input type="date" id="startDate" onchange="applyCustomFilter()">
-            <span style="color:#aaa">至</span>
-            <input type="date" id="endDate" onchange="applyCustomFilter()">
-            <button onclick="applyCustomFilter()">确定</button>
-        </div>
-    </div>
-    <div class="breadcrumb" id="breadcrumb"></div>
-
-    <!-- 三个页面容器 -->
-    <div class="page-container active" id="pageOverview">
-        <div class="stats-grid" id="statsGrid"></div>
-        <div class="charts-area" id="chartsArea"></div>
-        <div class="detail-section" id="detailSection"></div>
-    </div>
-    <div class="page-container" id="pageStocks">
-        <div id="stocksContent" style="padding:24px 30px;"></div>
-    </div>
-    <div class="page-container" id="pageCalendar">
-        <div id="calendarContent" style="padding:24px 30px;"></div>
-    </div>
-
-    <div class="footer">
-        <p>报告生成时间：{gen_time} | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
-    </div>
-</div>
-<script>
-const ALL_DATA = {data_json};
-const NOW = '{now_str}';
-let state = {{ view: 'overview', filterType: 'mtd', customStart: '', customEnd: '', drillParam: null, activeTab: 'overview' }};
-let navStack = [];
-const chartMap = {{}};
-function fmtMoney(n, sign) {{
-    const s = n >= 0 ? (sign ? '+' : '') : '';
-    return s + '¥' + Math.abs(n).toLocaleString('zh-CN', {{minimumFractionDigits:2, maximumFractionDigits:2}});
-}}
-function fmtPct(n, sign) {{
-    const s = n >= 0 ? (sign ? '+' : '') : '';
-    return s + n.toFixed(2) + '%';
-}}
-function profitColor(v) {{ return v >= 0 ? '#e74c3c' : '#27ae60'; }}
-function profitCls(v) {{ return v >= 0 ? 'profit' : 'loss'; }}
-function groupBy(arr, keyFn) {{
-    const getKey = typeof keyFn === 'function' ? keyFn : r => r[keyFn];
-    const m = {{}};
-    arr.forEach(r => {{ const k = getKey(r); if (!m[k]) m[k] = []; m[k].push(r); }});
-    return m;
-}}
-function sumField(arr, f) {{ return arr.reduce((s,r) => s + (typeof f === 'function' ? f(r) : r[f]), 0); }}
-function unique(arr, f) {{ const fn = typeof f === 'function' ? f : r => r[f]; return [...new Set(arr.map(fn))]; }}
-function disposeAll() {{
-    Object.values(chartMap).forEach(c => {{ try {{ c.dispose(); }} catch(e){{}} }});
-    Object.keys(chartMap).forEach(k => delete chartMap[k]);
-}}
-function mkChart(id) {{
-    const dom = document.getElementById(id);
-    if (!dom) return null;
-    const c = echarts.init(dom);
-    chartMap[id] = c;
-    return c;
-}}
-function getFilteredRecords() {{
-    let recs = [...ALL_DATA];
-    if (state.filterType === 'mtd') {{
-        const m = NOW.substring(0,7);
-        recs = recs.filter(r => r.date.startsWith(m));
-    }} else if (state.filterType === 'ytd') {{
-        const y = NOW.substring(0,4);
-        recs = recs.filter(r => r.date.startsWith(y));
-    }} else if (state.filterType === 'custom' && state.customStart && state.customEnd) {{
-        recs = recs.filter(r => r.date >= state.customStart && r.date <= state.customEnd);
-    }}
-    return recs;
-}}
-/* ====== 标签页切换 ====== */
-function switchTab(tab) {{
-    state.activeTab = tab;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-    document.querySelectorAll('.page-container').forEach(p => p.classList.remove('active'));
-    if (tab === 'overview') {{
-        document.getElementById('pageOverview').classList.add('active');
-        state.view = 'overview'; state.drillParam = null; navStack = [];
-        render();
-    }} else if (tab === 'stocks') {{
-        document.getElementById('pageStocks').classList.add('active');
-        renderStocksOverview();
-    }} else if (tab === 'calendar') {{
-        document.getElementById('pageCalendar').classList.add('active');
-        renderCalendarView();
-    }}
-}}
-function setFilter(type) {{
-    state.filterType = type;
-    document.querySelectorAll('.filter-btn').forEach(b => {{
-        b.classList.toggle('active', b.dataset.type === type);
-    }});
-    document.getElementById('customDate').classList.toggle('show', type === 'custom');
-    if (type !== 'custom') {{
-        state.view = 'overview'; state.drillParam = null; navStack = [];
-    }}
-    render();
-    if (state.activeTab === 'stocks') renderStocksOverview();
-    if (state.activeTab === 'calendar') renderCalendarView();
-}}
-function applyCustomFilter() {{
-    state.customStart = document.getElementById('startDate').value;
-    state.customEnd = document.getElementById('endDate').value;
-    if (state.customStart && state.customEnd) {{
-        state.view = 'overview'; state.drillParam = null; navStack = []; render();
-        if (state.activeTab === 'stocks') renderStocksOverview();
-        if (state.activeTab === 'calendar') renderCalendarView();
-    }}
-}}
-function drillTo(view, param) {{
-    navStack.push({{view: state.view, param: state.drillParam}});
-    state.view = view; state.drillParam = param; render();
-    window.scrollTo({{top: 0, behavior: 'smooth'}});
-}}
-function goBack() {{
-    if (navStack.length === 0) return;
-    const prev = navStack.pop();
-    state.view = prev.view; state.drillParam = prev.param; render();
-    window.scrollTo({{top: 0, behavior: 'smooth'}});
-}}
-function renderBreadcrumb() {{
-    const el = document.getElementById('breadcrumb');
-    let html = '<span onclick="goBackOverview()">汇总概览</span>';
-    if (state.view === 'month') {{
-        html += '<span class="sep">›</span><span class="current">' + state.drillParam + ' 月度明细</span>';
-    }} else if (state.view === 'day') {{
-        html += '<span class="sep">›</span><span onclick="goBackToMonthFromDay()">月度</span><span class="sep">›</span><span class="current">' + state.drillParam + ' 日度明细</span>';
-    }} else if (state.view === 'stock') {{
-        html += '<span class="sep">›</span><span class="current">' + state.drillParam + ' 个股分析</span>';
-    }}
-    el.innerHTML = html;
-}}
-function goBackOverview() {{ state.view = 'overview'; state.drillParam = null; navStack = []; render(); }}
-function goBackToMonthFromDay() {{
-    const month = state.drillParam ? state.drillParam.substring(0,7) : NOW.substring(0,7);
-    state.view = 'month'; state.drillParam = month; render();
-}}
-function renderStats(cards) {{
-    const el = document.getElementById('statsGrid');
-    el.innerHTML = cards.map(c => '<div class="stat-card"><div class="label">' + c.label + '</div><div class="value ' + c.cls + '">' + c.value + '</div></div>').join('');
-}}
-function computeStats(recs) {{
-    const tp = sumField(recs, 'profit');
-    const tb = sumField(recs, 'buyAmount');
-    const ts = sumField(recs, 'sellAmount');
-    const tr = tb > 0 ? tp / tb * 100 : 0;
-    const dates = unique(recs, 'date');
-    const stocks = unique(recs, 'name');
-    const winCount = recs.filter(r => r.profit > 0).length;
-    const loseCount = recs.filter(r => r.profit < 0).length;
-    const tComm = sumField(recs, 'commission');
-    const tStamp = sumField(recs, 'stampDuty');
-    const tCost = sumField(recs, 'totalCost');
-
-    // 计算连续亏损和最大回撤
-    const dayGroups = groupBy(recs, 'date');
-    const days = Object.keys(dayGroups).sort();
-    const dayProfits = days.map(d => sumField(dayGroups[d], 'profit'));
-
-    // 最长连续亏损天数
-    let maxConsecLoss = 0, curConsecLoss = 0;
-    dayProfits.forEach(p => {{
-        if (p < 0) {{ curConsecLoss++; maxConsecLoss = Math.max(maxConsecLoss, curConsecLoss); }}
-        else {{ curConsecLoss = 0; }}
-    }});
-
-    // 最大回撤（从累计收益峰值到谷值的最大跌幅）
-    let cumProfit = 0, maxCum = 0, maxDrawdown = 0;
-    dayProfits.forEach(p => {{
-        cumProfit += p;
-        maxCum = Math.max(maxCum, cumProfit);
-        maxDrawdown = Math.min(maxDrawdown, cumProfit - maxCum);
-    }});
-
-    // 最大单日亏损
-    const maxDayLoss = dayProfits.length > 0 ? Math.min(...dayProfits) : 0;
-
-    return [
-        {{label:'交易天数', value:dates.length, cls:'neutral'}},
-        {{label:'交易笔数', value:recs.length, cls:'neutral'}},
-        {{label:'涉及股票', value:stocks.length, cls:'neutral'}},
-        {{label:'盈利笔数', value:winCount, cls:'profit'}},
-        {{label:'亏损笔数', value:loseCount, cls:'loss'}},
-        {{label:'胜率', value: recs.length > 0 ? (winCount/recs.length*100).toFixed(1)+'%' : 'N/A', cls:'neutral'}},
-        {{label:'总买入金额', value: fmtMoney(tb), cls:'neutral'}},
-        {{label:'总卖出金额', value: fmtMoney(ts), cls:'neutral'}},
-        {{label:'佣金合计', value: fmtMoney(tComm), cls:'neutral'}},
-        {{label:'印花税合计', value: fmtMoney(tStamp), cls:'neutral'}},
-        {{label:'交易成本合计', value: fmtMoney(tCost), cls:'neutral'}},
-        {{label:'总盈亏', value: fmtMoney(tp,true), cls: profitCls(tp)}},
-        {{label:'总收益率', value: fmtPct(tr,true), cls: profitCls(tr)}},
-        {{label:'最长连续亏损', value: maxConsecLoss + '天', cls: maxConsecLoss >= 3 ? 'loss' : 'neutral'}},
-        {{label:'最大回撤', value: fmtMoney(maxDrawdown,true), cls: 'loss'}},
-        {{label:'最大单日亏损', value: fmtMoney(maxDayLoss,true), cls: 'loss'}},
-    ];
-}}
-function renderDetailTable(recs, title) {{
-    const el = document.getElementById('detailSection');
-    if (recs.length === 0) {{ el.innerHTML = ''; return; }}
-    el.innerHTML = '<h2 class="chart-title" style="margin-bottom:14px">' + title + '</h2>' +
-        '<table class="detail-table"><thead><tr><th>日期</th><th>来源</th><th>证券名称</th><th>匹配数量</th><th>买入均价</th><th>卖出均价</th><th>买入金额</th><th>卖出金额</th><th>佣金</th><th>印花税</th><th>盈亏金额</th><th>盈亏比例</th></tr></thead><tbody>' +
-        recs.map(r => {{
-            const pc = r.profit >= 0 ? 'profit-cell' : 'loss-cell';
-            return '<tr><td>' + r.date + '</td><td>' + r.source + '</td><td><b>' + r.name + '</b></td><td>' + r.matchQty + '</td><td>¥' + r.buyPrice.toFixed(4) + '</td><td>¥' + r.sellPrice.toFixed(4) + '</td><td>' + fmtMoney(r.buyAmount) + '</td><td>' + fmtMoney(r.sellAmount) + '</td><td>' + fmtMoney(r.commission) + '</td><td>' + fmtMoney(r.stampDuty) + '</td><td class="' + pc + '">' + fmtMoney(r.profit,true) + '</td><td class="' + pc + '">' + r.profitPct + '</td></tr>';
-        }}).join('') + '</tbody></table>';
-}}
-
-/* ====== 个股总览页面 ====== */
-function renderStocksOverview() {{
-    const recs = getFilteredRecords();
-    const el = document.getElementById('stocksContent');
-    if (recs.length === 0) {{
-        el.innerHTML = '<div class="empty-state">当前筛选条件下暂无数据</div>';
-        return;
-    }}
-    const stockGroups = groupBy(recs, 'name');
-    const stockList = Object.keys(stockGroups).map(n => {{
-        const trades = stockGroups[n];
-        const totalProfit = sumField(trades, 'profit');
-        const totalBuy = sumField(trades, 'buyAmount');
-        const totalSell = sumField(trades, 'sellAmount');
-        const totalCost = sumField(trades, 'totalCost');
-        const totalComm = sumField(trades, 'commission');
-        const totalStamp = sumField(trades, 'stampDuty');
-        const winCount = trades.filter(r => r.profit > 0).length;
-        const loseCount = trades.filter(r => r.profit < 0).length;
-        const winRate = trades.length > 0 ? winCount / trades.length * 100 : 0;
-        const avgProfit = trades.length > 0 ? totalProfit / trades.length : 0;
-        const returnRate = totalBuy > 0 ? totalProfit / totalBuy * 100 : 0;
-        const tradeDays = unique(trades, 'date').length;
-        const maxWin = Math.max(...trades.map(r => r.profit));
-        const maxLoss = Math.min(...trades.map(r => r.profit));
-        return {{
-            name: n, code: trades[0].code, count: trades.length, tradeDays,
-            totalProfit, totalBuy, totalSell, totalCost, totalComm, totalStamp,
-            winCount, loseCount, winRate, avgProfit, returnRate, maxWin, maxLoss
-        }};
-    }}).sort((a,b) => b.totalProfit - a.totalProfit);
-
-    const maxAbsProfit = Math.max(...stockList.map(s => Math.abs(s.totalProfit)), 1);
-
-    // 顶部汇总卡片
-    const totalProfit = stockList.reduce((s,x) => s + x.totalProfit, 0);
-    const totalCost = stockList.reduce((s,x) => s + x.totalCost, 0);
-    const avgWinRate = stockList.length > 0 ? stockList.reduce((s,x) => s + x.winRate, 0) / stockList.length : 0;
-
-    let html = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px;">
-        <div class="stat-card"><div class="label">交易股票数</div><div class="value neutral">${{stockList.length}}</div></div>
-        <div class="stat-card"><div class="label">总盈亏</div><div class="value ${{profitCls(totalProfit)}}">${{fmtMoney(totalProfit,true)}}</div></div>
-        <div class="stat-card"><div class="label">总交易成本</div><div class="value neutral">${{fmtMoney(totalCost)}}</div></div>
-        <div class="stat-card"><div class="label">平均胜率</div><div class="value neutral">${{avgWinRate.toFixed(1)}}%</div></div>
-    </div>
-    <h2 class="chart-title">🏆 个股累计盈亏排行榜</h2>
-    <div style="overflow-x:auto;">
-    <table class="stock-overview-table">
-        <thead><tr>
-            <th>排名</th><th>证券名称</th><th>代码</th><th>交易次数</th><th>交易天数</th>
-            <th>盈利次数</th><th>亏损次数</th><th>胜率</th>
-            <th>总买入金额</th><th>总卖出金额</th>
-            <th>佣金</th><th>印花税</th><th>交易成本</th>
-            <th>平均每次盈亏</th><th>单笔最大盈利</th><th>单笔最大亏损</th>
-            <th>总盈亏</th><th>累计收益率</th>
-        </tr></thead><tbody>`;
-
-    stockList.forEach((s, i) => {{
-        const profitPct = s.totalProfit / maxAbsProfit * 100;
-        const barColor = s.totalProfit >= 0 ? '#e74c3c' : '#27ae60';
-        const barWidth = Math.abs(profitPct);
-        html += `<tr onclick="switchTab('overview'); setTimeout(()=>drillTo('stock','${{s.name}}'),100);">
-            <td class="rank">${{i+1}}</td>
-            <td class="stock-name" style="color:${{barColor}}">${{s.name}}</td>
-            <td>${{s.code}}</td>
-            <td>${{s.count}}</td><td>${{s.tradeDays}}</td>
-            <td style="color:#e74c3c">${{s.winCount}}</td><td style="color:#27ae60">${{s.loseCount}}</td>
-            <td><span class="winrate-bar"><span class="winrate-fill" style="width:${{s.winRate}}%"></span></span>${{s.winRate.toFixed(1)}}%</td>
-            <td>${{fmtMoney(s.totalBuy)}}</td><td>${{fmtMoney(s.totalSell)}}</td>
-            <td>${{fmtMoney(s.totalComm)}}</td><td>${{fmtMoney(s.totalStamp)}}</td><td>${{fmtMoney(s.totalCost)}}</td>
-            <td class="${{profitCls(s.avgProfit)}}">${{fmtMoney(s.avgProfit,true)}}</td>
-            <td style="color:#e74c3c">${{fmtMoney(s.maxWin,true)}}</td>
-            <td style="color:#27ae60">${{fmtMoney(s.maxLoss,true)}}</td>
-            <td>
-                <span class="profit-bar"><span class="profit-bar-fill" style="width:${{barWidth}}%;background:${{barColor}}"></span></span>
-                <span class="${{profitCls(s.totalProfit)}}" style="font-weight:700;font-size:15px">${{fmtMoney(s.totalProfit,true)}}</span>
-            </td>
-            <td class="${{profitCls(s.returnRate)}}" style="font-weight:600">${{fmtPct(s.returnRate,true)}}</td>
-        </tr>`;
-    }});
-
-    html += '</tbody></table></div>';
-
-    // 个股盈亏柱状图（股票超过15只时，隐藏盈亏±50以内的票）
-    const chartStockList = stockList.length > 15 ? stockList.filter(s => Math.abs(s.totalProfit) > 50) : stockList;
-    const hiddenCount = stockList.length - chartStockList.length;
-    html += `<div style="margin-top:32px;"><h2 class="chart-title">📊 个股累计盈亏对比图${{hiddenCount > 0 ? ' <span style="font-size:13px;color:#999;font-weight:normal">（已隐藏' + hiddenCount + '只盈亏±50元以内股票）</span>' : ''}}</h2><div id="chartStockOverview" class="chart-wrap"></div></div>`;
-    // 个股胜率对比
-    html += `<div style="margin-top:32px;"><h2 class="chart-title">🎯 个股胜率对比</h2><div id="chartStockWinrate" class="chart-wrap"></div></div>`;
-
-    el.innerHTML = html;
-
-    // 盈亏对比柱状图
-    const sc = mkChart('chartStockOverview');
-    sc.setOption({{
-        tooltip: {{ trigger:'axis', formatter: p => p[0].name+'<br/>累计盈亏：'+fmtMoney(p[0].value,true) }},
-        grid: {{ left:'3%', right:'4%', bottom:'15%', containLabel:true }},
-        xAxis: {{ type:'category', data: chartStockList.map(s=>s.name), axisLabel:{{color:'#555', rotate:30}} }},
-        yAxis: {{ type:'value', name:'盈亏（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-        series: [{{ type:'bar', data: chartStockList.map(s=>Math.round(s.totalProfit*100)/100), itemStyle:{{ color: p => profitColor(p.value) }}, label:{{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:10 }} }}]
-    }});
-    sc.on('click', p => {{ switchTab('overview'); setTimeout(()=>drillTo('stock',p.name),100); }});
-
-    // 胜率对比
-    const wc = mkChart('chartStockWinrate');
-    wc.setOption({{
-        tooltip: {{ trigger:'axis', formatter: p => p[0].name+'<br/>胜率：'+p[0].value.toFixed(1)+'%' }},
-        grid: {{ left:'3%', right:'4%', bottom:'15%', containLabel:true }},
-        xAxis: {{ type:'category', data: stockList.map(s=>s.name), axisLabel:{{color:'#555', rotate:30}} }},
-        yAxis: {{ type:'value', name:'胜率（%）', max:100, axisLabel:{{formatter:'{{value}}%'}} }},
-        series: [{{ type:'bar', data: stockList.map(s=>Math.round(s.winRate*10)/10), itemStyle:{{ color: p => p.value >= 60 ? '#667eea' : '#f39c12' }}, label:{{ show:true, position:'top', formatter: p => p.value.toFixed(1)+'%', color:'#333', fontSize:11 }} }}]
-    }});
-}}
-
-/* ====== 盈亏日历热力图 ====== */
-function renderCalendarView() {{
-    const recs = getFilteredRecords();
-    const el = document.getElementById('calendarContent');
-    if (recs.length === 0) {{
-        el.innerHTML = '<div class="empty-state">当前筛选条件下暂无数据</div>';
-        return;
-    }}
-
-    // 按日聚合盈亏
-    const dayGroups = groupBy(recs, 'date');
-    const dayData = Object.keys(dayGroups).sort().map(d => {{
-        const dayProfit = sumField(dayGroups[d], 'profit');
-        return [d, Math.round(dayProfit*100)/100];
-    }});
-
-    // 统计卡片
-    const dayProfits = dayData.map(d => d[1]);
-    const profitDays = dayProfits.filter(p => p > 0).length;
-    const lossDays = dayProfits.filter(p => p < 0).length;
-    const flatDays = dayProfits.filter(p => p === 0).length;
-    const maxProfitDay = dayData.reduce((a,b) => b[1] > a[1] ? b : a, dayData[0]);
-    const maxLossDay = dayData.reduce((a,b) => b[1] < a[1] ? b : a, dayData[0]);
-
-    // 连续亏损计算
-    let maxConsecLoss = 0, currentConsecLoss = 0;
-    let consecLossEnd = '';
-    let maxConsecLossStart = '', maxConsecLossEnd = '';
-    let currentConsecStart = '';
-    dayData.forEach(d => {{
-        if (d[1] < 0) {{
-            currentConsecLoss++;
-            if (currentConsecLoss === 1) currentConsecStart = d[0];
-            if (currentConsecLoss > maxConsecLoss) {{
-                maxConsecLoss = currentConsecLoss;
-                maxConsecLossStart = currentConsecStart;
-                maxConsecLossEnd = d[0];
-            }}
-        }} else {{
-            currentConsecLoss = 0;
-        }}
-    }});
-
-    // 当前是否处于连续亏损中
-    const lastDays = dayData.slice(-3);
-    const isInConsecLoss = lastDays.length > 0 && lastDays.every(d => d[1] < 0);
-
-    let statsHtml = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:28px;">
-        <div class="stat-card"><div class="label">交易天数</div><div class="value neutral">${{dayData.length}}</div></div>
-        <div class="stat-card"><div class="label">盈利天数</div><div class="value profit">${{profitDays}}</div></div>
-        <div class="stat-card"><div class="label">亏损天数</div><div class="value loss">${{lossDays}}</div></div>
-        <div class="stat-card"><div class="label">最长连续亏损</div><div class="value ${{maxConsecLoss >= 3 ? 'loss' : 'neutral'}}">${{maxConsecLoss}}天</div></div>
-        <div class="stat-card"><div class="label">最大单日盈利</div><div class="value profit">${{maxProfitDay[0]}} ${{fmtMoney(maxProfitDay[1],true)}}</div></div>
-        <div class="stat-card"><div class="label">最大单日亏损</div><div class="value loss">${{maxLossDay[0]}} ${{fmtMoney(maxLossDay[1],true)}}</div></div>
-    </div>`;
-
-    // 连续亏损警告
-    if (isInConsecLoss) {{
-        statsHtml += `<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:10px;padding:16px 20px;margin-bottom:24px;color:#856404;font-size:15px;">
-            ⚠️ <b>注意：</b>最近${{lastDays.length}}个交易日均为亏损，请注意控制风险，避免情绪化交易！
-        </div>`;
-    }}
-    if (maxConsecLoss >= 3) {{
-        statsHtml += `<div style="background:#f8d7da;border:1px solid #f5c6cb;border-radius:10px;padding:16px 20px;margin-bottom:24px;color:#721c24;font-size:14px;">
-            🔴 历史最长连续亏损：${{maxConsecLoss}}天（${{maxConsecLossStart}} 至 ${{maxConsecLossEnd}}），复盘时重点关注该区间交易逻辑。
-        </div>`;
-    }}
-
-    // 日历热力图
-    let calHtml = `<h2 class="chart-title">📅 盈亏日历热力图</h2>
-    <div style="margin-bottom:12px;font-size:13px;color:#888;">
-        <span style="display:inline-block;width:14px;height:14px;background:#b71c1c;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>大赚
-        <span style="display:inline-block;width:14px;height:14px;background:#ef9a9a;border-radius:2px;vertical-align:middle;margin-left:12px;margin-right:3px;"></span>小赚
-        <span style="display:inline-block;width:14px;height:14px;background:#e8e8e8;border-radius:2px;vertical-align:middle;margin-left:12px;margin-right:3px;"></span>无交易
-        <span style="display:inline-block;width:14px;height:14px;background:#a5d6a7;border-radius:2px;vertical-align:middle;margin-left:12px;margin-right:3px;"></span>小亏
-        <span style="display:inline-block;width:14px;height:14px;background:#2e7d32;border-radius:2px;vertical-align:middle;margin-left:12px;margin-right:3px;"></span>大亏
-    </div>
-    <div id="chartCalendar" style="width:100%;height:280px;"></div>`;
-
-    // 日度盈亏柱状图（按时间排列，可点击查看当天明细）
-    calHtml += `<div style="margin-top:32px;"><h2 class="chart-title">📈 日度盈亏详情 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看当日明细）</span></h2><div id="chartCalDaily" class="chart-wrap"></div></div>`;
-
-    // 当日交易明细表
-    calHtml += '<div id="calDetailSection"></div>';
-
-    el.innerHTML = statsHtml + calHtml;
-
-    // 渲染ECharts日历热力图
-    const cc = mkChart('chartCalendar');
-    // 确定日历范围
-    const dateRange = dayData.length > 0 ? [dayData[0][0], dayData[dayData.length-1][0]] : [NOW, NOW];
-
-    // 构建可视化数据（带颜色映射）
-    const maxAbs = Math.max(...dayData.map(d => Math.abs(d[1])), 1);
-
-    cc.setOption({{
-        tooltip: {{
-            formatter: function(p) {{
-                const d = p.data || p.value;
-                const date = Array.isArray(d) ? d[0] : d[0];
-                const val = Array.isArray(d) ? d[1] : d[1];
-                return date + '<br/>当日盈亏：' + fmtMoney(val, true);
-            }}
-        }},
-        visualMap: {{
-            min: -maxAbs,
-            max: maxAbs,
-            orient: 'horizontal',
-            left: 'center',
-            top: 0,
-            itemWidth: 14,
-            itemHeight: 120,
-            inRange: {{
-                color: ['#2e7d32', '#4caf50', '#a5d6a7', '#e8e8e8', '#ef9a9a', '#e57373', '#b71c1c']
-            }},
-            text: ['大赚', '大亏'],
-            textStyle: {{ color: '#555', fontSize: 12 }},
-            formatter: function(val) {{ return '¥' + val.toFixed(0); }}
-        }},
-        calendar: {{
-            top: 60,
-            left: 60,
-            right: 60,
-            bottom: 20,
-            cellSize: ['auto', 28],
-            range: dateRange[0].substring(0,4),
-            itemStyle: {{ borderWidth: 2, borderColor: '#fff' }},
-            yearLabel: {{ show: false }},
-            dayLabel: {{ firstDay: 1, color: '#555', nameMap: 'ZH' }},
-            monthLabel: {{ color: '#555', nameMap: 'ZH' }},
-            splitLine: {{ show: true, lineStyle: {{ color: '#e0e0e0', width: 1 }} }}
-        }},
-        series: [{{
-            type: 'heatmap',
-            coordinateSystem: 'calendar',
-            data: dayData,
-            itemStyle: {{ borderWidth: 2, borderColor: '#fff', borderRadius: 3 }}
-        }}]
-    }});
-    cc.on('click', p => {{
-        const date = Array.isArray(p.data) ? p.data[0] : (p.value ? p.value[0] : null);
-        if (date) showCalDayDetail(date);
-    }});
-
-    // 日度盈亏柱状图
-    const dc = mkChart('chartCalDaily');
-    dc.setOption({{
-        tooltip: {{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) }},
-        xAxis: {{ type:'category', data: dayData.map(d=>d[0]), axisLabel:{{color:'#555', rotate:45}} }},
-        yAxis: {{ type:'value', name:'盈亏（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-        series: [{{ type:'bar', data: dayData.map(d=>d[1]), itemStyle:{{ color: p => profitColor(p.value) }}, label:{{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:10 }} }}]
-    }});
-    dc.on('click', p => showCalDayDetail(p.name));
-}}
-
-function showCalDayDetail(date) {{
-    const recs = getFilteredRecords().filter(r => r.date === date);
-    if (recs.length === 0) return;
-    const el = document.getElementById('calDetailSection');
-    el.innerHTML = '<h2 class="chart-title" style="margin-top:24px;">📋 ' + date + ' 交易明细</h2>' +
-        '<table class="detail-table"><thead><tr><th>来源</th><th>证券名称</th><th>匹配数量</th><th>买入均价</th><th>卖出均价</th><th>买入金额</th><th>卖出金额</th><th>佣金</th><th>印花税</th><th>盈亏金额</th><th>盈亏比例</th></tr></thead><tbody>' +
-        recs.map(r => {{
-            const pc = r.profit >= 0 ? 'profit-cell' : 'loss-cell';
-            return '<tr><td>' + r.source + '</td><td><b>' + r.name + '</b></td><td>' + r.matchQty + '</td><td>¥' + r.buyPrice.toFixed(4) + '</td><td>¥' + r.sellPrice.toFixed(4) + '</td><td>' + fmtMoney(r.buyAmount) + '</td><td>' + fmtMoney(r.sellAmount) + '</td><td>' + fmtMoney(r.commission) + '</td><td>' + fmtMoney(r.stampDuty) + '</td><td class="' + pc + '">' + fmtMoney(r.profit,true) + '</td><td class="' + pc + '">' + r.profitPct + '</td></tr>';
-        }}).join('') + '</tbody></table>';
-    el.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-}}
-
-/* ====== 原有概览页面渲染 ====== */
-function renderOverview() {{
-    const recs = getFilteredRecords();
-    if (recs.length === 0) {{
-        disposeAll(); renderBreadcrumb();
-        document.getElementById('statsGrid').innerHTML = '';
-        document.getElementById('chartsArea').innerHTML = '<div class="empty-state">当前筛选条件下暂无数据</div>';
-        document.getElementById('detailSection').innerHTML = '';
-        return;
-    }}
-    renderStats(computeStats(recs));
-    const monthGroups = groupBy(recs, r => r.date.substring(0,7));
-    const months = Object.keys(monthGroups).sort();
-    const monthProfits = months.map(m => Math.round(sumField(monthGroups[m],'profit')*100)/100);
-    const dayGroups = groupBy(recs, 'date');
-    const days = Object.keys(dayGroups).sort();
-    const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
-    let cumulative = [], run = 0;
-    dayProfits.forEach(p => {{ run += p; cumulative.push(Math.round(run*100)/100); }});
-    const stockGroups = groupBy(recs, 'name');
-    const stockList = Object.keys(stockGroups).map(n => ({{
-        name: n, profit: Math.round(sumField(stockGroups[n],'profit')*100)/100,
-        count: stockGroups[n].length
-    }})).sort((a,b) => b.profit - a.profit);
-    const chartsArea = document.getElementById('chartsArea');
-    chartsArea.innerHTML = `
-        <div class="chart-section"><h2 class="chart-title">📈 月度盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取月度明细）</span></h2><div id="chartMonth" class="chart-wrap"></div></div>
-        <div class="chart-section"><h2 class="chart-title">📅 每日盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取日度明细）</span></h2><div id="chartDaily" class="chart-wrap"></div></div>
-        <div class="chart-section"><h2 class="chart-title">💰 累计收益曲线</h2><div id="chartCumulative" class="chart-wrap"></div></div>
-        <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏排行 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看个股明细）</span></h2><div id="chartStockBar" class="chart-wrap"></div></div>
-        <div class="chart-section"><h2 class="chart-title">🥧 盈亏构成分析 <span style="font-size:13px;color:#999;font-weight:normal">（盈利 vs 亏损分布）</span></h2><div id="chartStockPie" class="chart-wrap"></div></div>`;
-    document.getElementById('detailSection').innerHTML = '';
-    const mc = mkChart('chartMonth');
-    mc.setOption({{
-        tooltip: {{ trigger:'axis', formatter: p => p[0].name+'月<br/>盈亏：'+fmtMoney(p[0].value,true) }},
-        xAxis: {{ type:'category', data: months.map(m => m+'月'), axisLabel:{{color:'#555'}} }},
-        yAxis: {{ type:'value', name:'盈亏（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-        series: [{{ type:'bar', data: monthProfits, itemStyle:{{ color: p => profitColor(p.value) }}, label:{{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 }} }}]
-    }});
-    mc.on('click', p => drillTo('month', p.name.replace('月','')));
-    const dc = mkChart('chartDaily');
-    dc.setOption({{
-        tooltip: {{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) }},
-        xAxis: {{ type:'category', data: days, axisLabel:{{color:'#555', rotate:45}} }},
-        yAxis: {{ type:'value', name:'盈亏（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-        series: [{{ type:'bar', data: dayProfits, itemStyle:{{ color: p => profitColor(p.value) }}, label:{{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 }} }}]
-    }});
-    dc.on('click', p => drillTo('day', p.name));
-    const cc = mkChart('chartCumulative');
-    const maxCum = Math.max(...cumulative), minCum = Math.min(...cumulative);
-    let markPts = [];
-    if (cumulative.length > 0) {{
-        markPts.push({{type:'max', name:'最高 ¥'+maxCum.toFixed(0)}});
-        markPts.push({{type:'min', name:'最低 ¥'+minCum.toFixed(0)}});
-    }}
-    cc.setOption({{
-        tooltip: {{ trigger:'axis', formatter: p => p[0].name+'<br/>累计：'+fmtMoney(p[0].value,true) }},
-        xAxis: {{ type:'category', data: days, axisLabel:{{color:'#555', rotate:45}} }},
-        yAxis: {{ type:'value', name:'累计收益（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-        series: [{{ type:'line', data: cumulative, smooth:true, itemStyle:{{ color:'#667eea' }}, areaStyle:{{ color:{{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{{offset:0,color:'rgba(102,126,234,0.35)'}},{{offset:1,color:'rgba(102,126,234,0.02)'}}]}}}}, markPoint:{{ data: markPts }}, markLine:{{ data:[{{type:'average',name:'平均'}}] }} }}]
-    }});
-    const sb = mkChart('chartStockBar');
-    // 股票超过15只时，隐藏盈亏±50以内的票
-    const sbList = stockList.length > 15 ? stockList.filter(s => Math.abs(s.profit) > 50) : stockList;
-    const sbHidden = stockList.length - sbList.length;
-    sb.setOption({{
-        tooltip: {{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) }},
-        grid: {{ left:'3%', right:'4%', bottom:'15%', containLabel:true }},
-        xAxis: {{ type:'category', data: sbList.map(s=>s.name), axisLabel:{{color:'#555', rotate:30}} }},
-        yAxis: {{ type:'value', name:'盈亏（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-        series: [{{ type:'bar', data: sbList.map(s=>s.profit), itemStyle:{{ color: p => profitColor(p.value) }}, label:{{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:10 }} }}]
-    }});
-    sb.on('click', p => drillTo('stock', p.name));
-    if (sbHidden > 0) {{
-        const sbTitle = document.querySelector('#chartStockBar').closest('.chart-section').querySelector('.chart-title');
-        if (sbTitle) sbTitle.innerHTML += ' <span style="font-size:13px;color:#999;font-weight:normal">（已隐藏' + sbHidden + '只盈亏±50元以内股票）</span>';
-    }}
-    const sp = mkChart('chartStockPie');
-    const winStocks = stockList.filter(s => s.profit > 0);
-    const loseStocks = stockList.filter(s => s.profit < 0);
-    let pieData = [];
-    winStocks.forEach(s => {{
-        pieData.push({{name: s.name + ' (盈)', value: s.profit, itemStyle:{{color: '#e74c3c'}}}});
-    }});
-    loseStocks.forEach(s => {{
-        pieData.push({{name: s.name + ' (亏)', value: Math.abs(s.profit), itemStyle:{{color: '#27ae60'}}}});
-    }});
-    sp.setOption({{
-        tooltip:{{ trigger:'item', formatter: function(p) {{
-            const isWin = p.name.includes('(盈)');
-            const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
-            const val = p.value;
-            return rawName + '<br/>' + (isWin ? '盈利：' : '亏损：') + '¥' + val.toLocaleString('zh-CN', {{minimumFractionDigits:2}}) + '<br/>占比：' + p.percent + '%';
-        }} }},
-        series:[{{
-            type:'pie',
-            radius:['30%','60%'],
-            center:['50%','55%'],
-            itemStyle:{{ borderRadius:6, borderColor:'#fff', borderWidth:2 }},
-            label:{{ show:true, formatter: function(p) {{
-                const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
-                return rawName + '\\n¥' + p.value.toLocaleString('zh-CN', {{minimumFractionDigits:0}});
-            }}, fontSize:11 }},
-            emphasis:{{ label:{{ show:true, fontSize:13, fontWeight:'bold' }} }},
-            data: pieData
-        }}]
-    }});
-    sp.on('click', p => {{
-        const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
-        drillTo('stock', rawName);
-    }});
-}}
-function renderMonthView() {{
-    const allFiltered = getFilteredRecords();
-    const month = state.drillParam;
-    const recs = allFiltered.filter(r => r.date.startsWith(month));
-    if (recs.length === 0) {{ goBackOverview(); return; }}
-    renderStats(computeStats(recs));
-    const dayGroups = groupBy(recs, 'date');
-    const days = Object.keys(dayGroups).sort();
-    const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
-    let cum = [], run = 0;
-    dayProfits.forEach(p => {{ run += p; cum.push(Math.round(run*100)/100); }});
-    const stockGroups = groupBy(recs, 'name');
-    const stockList = Object.keys(stockGroups).map(n => ({{
-        name: n, profit: Math.round(sumField(stockGroups[n],'profit')*100)/100,
-        count: stockGroups[n].length
-    }})).sort((a,b) => b.profit - a.profit);
-    const chartsArea = document.getElementById('chartsArea');
-    chartsArea.innerHTML = `
-        <div class="chart-section"><h2 class="chart-title">📅 ${{month}} 每日盈亏 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看当日明细）</span></h2><div id="chartMonthDaily" class="chart-wrap"></div></div>
-        <div class="chart-section"><h2 class="chart-title">📊 ${{month}} 各股票盈亏 <span style="font-size:13px;color:#999;font-weight:normal">（横轴：股票名称）</span></h2><div id="chartMonthStock" class="chart-wrap"></div></div>
-        <div class="chart-section"><h2 class="chart-title">💰 ${{month}} 月内累计收益</h2><div id="chartMonthCum" class="chart-wrap"></div></div>`;
-    const dc = mkChart('chartMonthDaily');
-    dc.setOption({{
-        tooltip:{{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) }},
-        xAxis:{{ type:'category', data: days.map(d=>d.substring(8)), axisLabel:{{color:'#555'}} }},
-        yAxis:{{ type:'value', name:'盈亏（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-        series:[{{ type:'bar', data: dayProfits, itemStyle:{{ color: p => profitColor(p.value) }}, label:{{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 }} }}]
-    }});
-    dc.on('click', p => drillTo('day', month + '-' + p.name));
-    const msc = mkChart('chartMonthStock');
-    // 股票超过15只时，隐藏盈亏±50以内的票
-    const mscList = stockList.length > 15 ? stockList.filter(s => Math.abs(s.profit) > 50) : stockList;
-    const mscHidden = stockList.length - mscList.length;
-    msc.setOption({{
-        tooltip:{{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true)+'<br/>交易次数：'+stockGroups[p[0].name].length }},
-        grid:{{ left:'3%', right:'4%', bottom:'15%', containLabel:true }},
-        xAxis:{{ type:'category', data: mscList.map(s=>s.name), axisLabel:{{color:'#555', rotate:30}} }},
-        yAxis:{{ type:'value', name:'盈亏（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-        series:[{{ type:'bar', data: mscList.map(s=>s.profit), itemStyle:{{ color: p => profitColor(p.value) }}, label:{{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 }} }}]
-    }});
-    msc.on('click', p => drillTo('stock', p.name));
-    if (mscHidden > 0) {{
-        const mscTitle = document.querySelector('#chartMonthStock').closest('.chart-section').querySelector('.chart-title');
-        if (mscTitle) mscTitle.innerHTML += ' <span style="font-size:13px;color:#999;font-weight:normal">（已隐藏' + mscHidden + '只盈亏±50元以内股票）</span>';
-    }}
-    const ccc = mkChart('chartMonthCum');
-    ccc.setOption({{
-        tooltip:{{ trigger:'axis', formatter: p => p[0].name+'<br/>累计：'+fmtMoney(p[0].value,true) }},
-        xAxis:{{ type:'category', data: days.map(d=>d.substring(8)), axisLabel:{{color:'#555'}} }},
-        yAxis:{{ type:'value', name:'累计收益（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-        series:[{{ type:'line', data: cum, smooth:true, itemStyle:{{ color:'#667eea' }}, areaStyle:{{ color:{{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{{offset:0,color:'rgba(102,126,234,0.3)'}},{{offset:1,color:'rgba(102,126,234,0.02)'}}]}}}}, markPoint:{{ data:[{{type:'max',name:'最高'}},{{type:'min',name:'最低'}}] }} }}]
-    }});
-    renderDetailTable(recs, '📋 ' + month + ' 全部交易明细');
-}}
-function renderDayView() {{
-    const allFiltered = getFilteredRecords();
-    const date = state.drillParam;
-    const recs = allFiltered.filter(r => r.date === date);
-    if (recs.length === 0) {{ goBack(); return; }}
-    renderStats(computeStats(recs));
-    const sorted = [...recs].sort((a,b) => b.profit - a.profit);
-    const chartsArea = document.getElementById('chartsArea');
-    chartsArea.innerHTML = `<div class="chart-section"><h2 class="chart-title">📊 ${{date}} 各股票盈亏</h2><div id="chartDayStock" class="chart-wrap" style="height:350px"></div></div>`;
-    const sc = mkChart('chartDayStock');
-    sc.setOption({{
-        tooltip:{{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) }},
-        grid:{{ left:'3%', right:'4%', bottom:'10%', containLabel:true }},
-        xAxis:{{ type:'category', data: sorted.map(r=>r.name), axisLabel:{{color:'#555', rotate:20}} }},
-        yAxis:{{ type:'value', name:'盈亏（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-        series:[{{ type:'bar', data: sorted.map(r=>r.profit), itemStyle:{{ color: p => profitColor(p.value) }}, label:{{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:12 }} }}]
-    }});
-    renderDetailTable(recs, '📋 ' + date + ' 交易明细');
-}}
-function renderStockView() {{
-    const allFiltered = getFilteredRecords();
-    const stockName = state.drillParam;
-    const recs = allFiltered.filter(r => r.name === stockName);
-    if (recs.length === 0) {{ goBack(); return; }}
-    const totalProfit = sumField(recs, 'profit');
-    const totalBuy = sumField(recs, 'buyAmount');
-    const totalSell = sumField(recs, 'sellAmount');
-    const totalRate = totalBuy > 0 ? totalProfit / totalBuy * 100 : 0;
-    const tradeDays = unique(recs, 'date');
-    const winCount = recs.filter(r => r.profit > 0).length;
-    const tComm = sumField(recs, 'commission');
-    const tStamp = sumField(recs, 'stampDuty');
-    const tCost = sumField(recs, 'totalCost');
-    renderStats([
-        {{label:'股票名称', value: stockName, cls:'neutral'}},
-        {{label:'证券代码', value: recs[0].code, cls:'neutral'}},
-        {{label:'交易天数', value: tradeDays.length, cls:'neutral'}},
-        {{label:'交易次数', value: recs.length, cls:'neutral'}},
-        {{label:'盈利次数', value: winCount, cls:'profit'}},
-        {{label:'亏损次数', value: recs.length - winCount, cls:'loss'}},
-        {{label:'胜率', value: recs.length > 0 ? (winCount/recs.length*100).toFixed(1)+'%' : 'N/A', cls:'neutral'}},
-        {{label:'总买入金额', value: fmtMoney(totalBuy), cls:'neutral'}},
-        {{label:'总卖出金额', value: fmtMoney(totalSell), cls:'neutral'}},
-        {{label:'佣金合计', value: fmtMoney(tComm), cls:'neutral'}},
-        {{label:'印花税合计', value: fmtMoney(tStamp), cls:'neutral'}},
-        {{label:'交易成本合计', value: fmtMoney(tCost), cls:'neutral'}},
-        {{label:'平均每次盈亏', value: fmtMoney(totalProfit/recs.length,true), cls: profitCls(totalProfit)}},
-        {{label:'总盈亏', value: fmtMoney(totalProfit,true), cls: profitCls(totalProfit)}},
-        {{label:'总收益率', value: fmtPct(totalRate,true), cls: profitCls(totalRate)}},
-    ]);
-    const dayGroups = groupBy(recs, 'date');
-    const days = Object.keys(dayGroups).sort();
-    const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
-    let cum = [], run = 0;
-    dayProfits.forEach(p => {{ run += p; cum.push(Math.round(run*100)/100); }});
-    const chartsArea = document.getElementById('chartsArea');
-    const singleDay = days.length === 1;
-    if (singleDay) {{
-        chartsArea.innerHTML = `<div class="chart-section"><h2 class="chart-title">📊 ${{stockName}} 盈亏分布</h2><div id="chartStockSingle" class="chart-wrap" style="height:300px"></div></div>`;
-        const sc = mkChart('chartStockSingle');
-        sc.setOption({{
-            tooltip:{{ trigger:'item', formatter:'{{b}}<br/>¥{{c}}' }},
-            series:[{{ type:'pie', radius:['40%','65%'], data: recs.map(r => ({{ name: r.date, value: r.profit, itemStyle:{{ color: profitColor(r.profit) }} }})), label:{{ formatter:'{{b}}\\n{{c}}' }} }}]
-        }});
-    }} else {{
-        chartsArea.innerHTML = `
-            <div class="chart-section"><h2 class="chart-title">📅 ${{stockName}} 每日盈亏 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看当日明细）</span></h2><div id="chartStockDaily" class="chart-wrap"></div></div>
-            <div class="chart-section"><h2 class="chart-title">💰 ${{stockName}} 累计收益曲线</h2><div id="chartStockCum" class="chart-wrap"></div></div>`;
-        const dc = mkChart('chartStockDaily');
-        dc.setOption({{
-            tooltip:{{ trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) }},
-            xAxis:{{ type:'category', data: days, axisLabel:{{color:'#555', rotate:45}} }},
-            yAxis:{{ type:'value', name:'盈亏（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-            series:[{{ type:'bar', data: dayProfits, itemStyle:{{ color: p => profitColor(p.value) }}, label:{{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 }} }}]
-        }});
-        dc.on('click', p => drillTo('day', p.name));
-        const cc = mkChart('chartStockCum');
-        cc.setOption({{
-            tooltip:{{ trigger:'axis', formatter: p => p[0].name+'<br/>累计：'+fmtMoney(p[0].value,true) }},
-            xAxis:{{ type:'category', data: days, axisLabel:{{color:'#555', rotate:45}} }},
-            yAxis:{{ type:'value', name:'累计收益（元）', axisLabel:{{formatter:'¥{{value}}'}} }},
-            series:[{{ type:'line', data: cum, smooth:true, itemStyle:{{ color:'#667eea' }}, areaStyle:{{ color:{{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{{offset:0,color:'rgba(102,126,234,0.3)'}},{{offset:1,color:'rgba(102,126,234,0.02)'}}]}}}}, markPoint:{{ data:[{{type:'max',name:'最高'}},{{type:'min',name:'最低'}}] }} }}]
-        }});
-    }}
-    renderDetailTable(recs, '📋 ' + stockName + ' 全部交易记录');
-}}
-function render() {{
-    disposeAll(); renderBreadcrumb();
-    switch (state.view) {{
-        case 'overview': renderOverview(); break;
-        case 'month':   renderMonthView(); break;
-        case 'day':     renderDayView(); break;
-        case 'stock':   renderStockView(); break;
-    }}
-}}
-window.addEventListener('resize', () => {{
-    Object.values(chartMap).forEach(c => {{ try {{ c.resize(); }} catch(e){{}} }});
-}});
-render();
-</script>
-</body>
-</html>"""
+# generate_html_template 已移除，HTML/CSS/JS 模板存放在 reports/templates/summary_report.html
 
 
 # ==================== 辅助函数 ====================
@@ -2504,7 +1657,16 @@ def main():
             print(f"  合并卖出：{len(merged_sells)} 笔")
             print(f"  涉及来源：{', '.join(sorted(file_sources))}")
 
-            profit_results = calculate_profits(merged_df, merged_buys, merged_sells, trading_date, primary_source)
+            # 数据校验：检查合理性，打印告警，剔除严重异常行
+            merged_df = validate_trades(merged_df, primary_source)
+            if len(merged_df) == 0:
+                print("  [告警] 校验后无有效记录，跳过盈亏计算")
+                profit_results = []
+            else:
+                # 重新拆分校验后的买卖记录
+                merged_buys = merged_df[merged_df['买卖类别'].str.contains('证券买入', na=False)].copy()
+                merged_sells = merged_df[merged_df['买卖类别'].str.contains('证券卖出', na=False)].copy()
+                profit_results = calculate_profits(merged_df, merged_buys, merged_sells, trading_date, primary_source)
 
             if profit_results:
                 result_df = pd.DataFrame(profit_results)
