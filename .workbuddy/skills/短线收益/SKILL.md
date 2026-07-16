@@ -108,15 +108,24 @@ cd d:\短线收益
 分析完成后，必须执行以下步骤：
 
 1. 展示分析结果（毛盈亏、佣金、印花税、净盈亏）
-2. 提交并推送到 Git：
+2. **刷新当月 + 当年跨天配对（每日自动同步，用户要求）**：当日分析写入汇总表后，紧接着用**当前**月份和年份刷新跨天配对，让"当月真实盈亏""当年真实盈亏"实时同步。跨天脚本只读汇总表、幂等安全，可天天重复跑：
+```bash
+cd d:\短线收益
+# 注意：这里传的是【当前】月/年（实时刷新），不是默认的上月/去年
+"C:\Users\Ryan\AppData\Local\Programs\Python\Python313\python.exe" 跨天配对分析.py --month YYYY-MM
+"C:\Users\Ryan\AppData\Local\Programs\Python\Python313\python.exe" 跨天配对分析.py --year YYYY
+```
+   - 输出：`reports/月度跨天配对分析_YYYY-MM.html`、`reports/年度跨天配对分析_YYYY.html`、`reports/剩余持仓_*.xlsx`
+   - ⚠️ 区分场景：**每日实时刷新**传当前月/年（如 `--month 2026-07 --year 2026`）；**月初/年初复盘**才用不带值的 `--month`/`--year`（自动取上月/去年）
+3. 提交并推送到 Git（当日报告 + 刷新后的跨天报告一起提交）：
 ```bash
 cd d:\短线收益
 git add -A
-git commit -m "YYYY-MM-DD 交易分析：..."
+git commit -m "YYYY-MM-DD 交易分析：...（含当月/当年跨天配对刷新）"
 git push
 ```
-3. 预览单日报告：`reports/YYYY-MM-DD-股票交易盈亏报告.html`
-4. 更新本地记忆文件 `d:\短线收益\.workbuddy\memory/YYYY-MM-DD.md`
+4. 预览单日报告：`reports/YYYY-MM-DD-股票交易盈亏报告.html`
+5. 更新本地记忆文件 `d:\短线收益\.workbuddy\memory/YYYY-MM-DD.md`
 
 ## ⚠️ 重要注意事项
 
