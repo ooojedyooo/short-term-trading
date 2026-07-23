@@ -808,7 +808,7 @@ function renderOverview() {
             itemStyle:{ borderRadius:6, borderColor:'#fff', borderWidth:2 },
             label:{ show:true, formatter: function(p) {
                 const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
-                return rawName + '\\n¥' + p.value.toLocaleString('zh-CN', {minimumFractionDigits:0});
+                return rawName + '\n¥' + p.value.toLocaleString('zh-CN', {minimumFractionDigits:0});
             }, fontSize:11 },
             emphasis:{ label:{ show:true, fontSize:13, fontWeight:'bold' } },
             data: pieData

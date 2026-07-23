@@ -185,7 +185,7 @@ body {
     </div>
 
     <div class="footer">
-        <p>报告生成时间：2026-07-23 16:55:44 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
+        <p>报告生成时间：2026-07-23 16:58:32 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
     </div>
 </div>
 <script>
@@ -808,7 +808,7 @@ function renderOverview() {
             itemStyle:{ borderRadius:6, borderColor:'#fff', borderWidth:2 },
             label:{ show:true, formatter: function(p) {
                 const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
-                return rawName + '\\n¥' + p.value.toLocaleString('zh-CN', {minimumFractionDigits:0});
+                return rawName + '\n¥' + p.value.toLocaleString('zh-CN', {minimumFractionDigits:0});
             }, fontSize:11 },
             emphasis:{ label:{ show:true, fontSize:13, fontWeight:'bold' } },
             data: pieData
