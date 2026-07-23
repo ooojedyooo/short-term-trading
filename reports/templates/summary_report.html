@@ -191,6 +191,7 @@ body {
 <script>
 const ALL_DATA = {__DATA_JSON__};
 const NOW = '{__NOW_STR__}';
+const MONTHLY_CROSS = {__MONTHLY_CROSS__};
 let state = { view: 'overview', filterType: 'mtd', customStart: '', customEnd: '', drillParam: null, activeTab: 'overview' };
 let navStack = [];
 const chartMap = {};
@@ -671,6 +672,12 @@ function renderOverview() {
     const monthGroups = groupBy(recs, r => r.date.substring(0,7));
     const months = Object.keys(monthGroups).sort();
     const monthProfits = months.map(m => Math.round(sumField(monthGroups[m],'profit')*100)/100);
+    // 月度跨天三柱图数据：系统现有 / 月度跨天释放 / 修正后总额（与跨天配对脚本口径一致）
+    const crossMap = (typeof MONTHLY_CROSS !== 'undefined') ? MONTHLY_CROSS : {};
+    const hasCross = Object.keys(crossMap).length > 0;
+    const monthSys = months.map((m,i) => hasCross ? (crossMap[m] ? crossMap[m].sys : 0) : monthProfits[i]);
+    const monthCross = months.map(m => hasCross && crossMap[m] ? crossMap[m].cross : 0);
+    const monthCorrected = months.map((m,i) => hasCross ? (crossMap[m] ? crossMap[m].corrected : monthProfits[i]) : monthProfits[i]);
     const dayGroups = groupBy(recs, 'date');
     const days = Object.keys(dayGroups).sort();
     const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
@@ -683,7 +690,7 @@ function renderOverview() {
     })).sort((a,b) => b.profit - a.profit);
     const chartsArea = document.getElementById('chartsArea');
     chartsArea.innerHTML = `
-        <div class="chart-section"><h2 class="chart-title">📈 月度盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取月度明细）</span></h2><div id="chartMonth" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">📈 月度盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（三柱：系统现有 / 月度跨天释放 / 修正后总额；点击柱体钻取月度明细）</span></h2><div id="chartMonth" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">📅 每日盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取日度明细）</span></h2><div id="chartDaily" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">💰 累计收益曲线</h2><div id="chartCumulative" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏排行 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看个股明细）</span></h2><div id="chartStockBar" class="chart-wrap"></div></div>
@@ -691,10 +698,20 @@ function renderOverview() {
     document.getElementById('detailSection').innerHTML = '';
     const mc = mkChart('chartMonth');
     mc.setOption({
-        tooltip: { trigger:'axis', formatter: p => p[0].name+'月<br/>盈亏：'+fmtMoney(p[0].value,true) },
+        tooltip: { trigger:'axis', formatter: function(p){
+            let s = p[0].name+'<br/>';
+            p.forEach(it => { s += it.marker + it.seriesName + '：' + fmtMoney(it.value,true) + '<br/>'; });
+            return s;
+        }},
+        legend: { data:['系统现有盈亏','月度跨天释放','修正后总额'], top: 4, textStyle:{color:'#555', fontSize:12} },
+        grid: { top: 44, left:'3%', right:'4%', bottom:'3%', containLabel:true },
         xAxis: { type:'category', data: months.map(m => m+'月'), axisLabel:{color:'#555'} },
         yAxis: { type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
-        series: [{ type:'bar', data: monthProfits, itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:11 } }]
+        series: [
+            { name:'系统现有盈亏', type:'bar', data: monthSys, barGap:'10%', itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:10 } },
+            { name:'月度跨天释放', type:'bar', data: monthCross, itemStyle:{ color:'#2f80ed' }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#2f80ed', fontSize:10 } },
+            { name:'修正后总额', type:'bar', data: monthCorrected, itemStyle:{ color:'#9b51e0' }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#9b51e0', fontSize:10 } }
+        ]
     });
     mc.on('click', p => drillTo('month', p.name.replace('月','')));
     const dc = mkChart('chartDaily');

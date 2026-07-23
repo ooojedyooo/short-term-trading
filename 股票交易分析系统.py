@@ -1408,6 +1408,23 @@ def generate_html_report_from_summary(trading_date):
 
 # ==================== 汇总可视化报告（v3.0 交互式） ====================
 
+def compute_monthly_cross():
+    """复用跨天配对分析脚本，算每月系统现有/跨天释放/修正后，用于汇总报告月度趋势三柱图。
+    返回 {ym: {'sys':..,'cross':..,'corrected':..}}。失败返回空字典，前端自动降级为单柱。"""
+    try:
+        import importlib
+        kt = importlib.import_module('跨天配对分析')
+        df = kt.load()
+        out = {}
+        for ym in sorted(df['ym'].unique()):
+            r = kt.analyze(df[df['ym'] == ym])
+            out[ym] = {'sys': r['sys_total'], 'cross': r['cross_net'], 'corrected': r['corrected']}
+        return out
+    except Exception as e:
+        print(f"[warn] 月度趋势图跨天数据计算失败，降级为仅显示系统现有盈亏：{e}")
+        return {}
+
+
 def generate_summary_html():
     """生成交互式汇总可视化HTML报告"""
     if not os.path.exists(EXCEL_OUTPUT):
@@ -1457,6 +1474,10 @@ def generate_summary_html():
     html_content = html_content.replace('{__DATA_JSON__}', data_json)
     html_content = html_content.replace('{__NOW_STR__}', now_str)
     html_content = html_content.replace('{__GEN_TIME__}', gen_time)
+
+    # 月度跨天三柱图数据（系统现有 / 跨天释放 / 修正后），与跨天配对脚本口径一致
+    monthly_cross = compute_monthly_cross()
+    html_content = html_content.replace('{__MONTHLY_CROSS__}', json.dumps(monthly_cross, ensure_ascii=False))
 
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
