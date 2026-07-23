@@ -197,12 +197,14 @@ let state = { view: 'overview', filterType: 'mtd', customStart: '', customEnd: '
 let navStack = [];
 const chartMap = {};
 function fmtMoney(n, sign) {
-    const s = n >= 0 ? (sign ? '+' : '') : '';
+    const neg = n < 0;
+    const s = neg ? '（-）' : (sign ? '+' : '');
     return s + '¥' + Math.abs(n).toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 function fmtPct(n, sign) {
-    const s = n >= 0 ? (sign ? '+' : '') : '';
-    return s + n.toFixed(2) + '%';
+    const neg = n < 0;
+    const s = neg ? '（-）' : (sign ? '+' : '');
+    return s + Math.abs(n).toFixed(2) + '%';
 }
 function profitColor(v) { return v >= 0 ? '#e74c3c' : '#27ae60'; }
 function profitCls(v) { return v >= 0 ? 'profit' : 'loss'; }
