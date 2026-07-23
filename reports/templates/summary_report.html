@@ -192,6 +192,7 @@ body {
 const ALL_DATA = {__DATA_JSON__};
 const NOW = '{__NOW_STR__}';
 const MONTHLY_CROSS = {__MONTHLY_CROSS__};
+const STOCK_CROSS = {__STOCK_CROSS__};
 let state = { view: 'overview', filterType: 'mtd', customStart: '', customEnd: '', drillParam: null, activeTab: 'overview' };
 let navStack = [];
 const chartMap = {};
@@ -683,18 +684,33 @@ function renderOverview() {
     const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
     let cumulative = [], run = 0;
     dayProfits.forEach(p => { run += p; cumulative.push(Math.round(run*100)/100); });
-    const stockGroups = groupBy(recs, 'name');
-    const stockList = Object.keys(stockGroups).map(n => ({
-        name: n, profit: Math.round(sumField(stockGroups[n],'profit')*100)/100,
-        count: stockGroups[n].length
-    })).sort((a,b) => b.profit - a.profit);
+    // 按证券代码分组（同一只票可能有OCR名称变体，按code合并避免跨天值重复累加）
+    const stockByCode = {};
+    recs.forEach(r => {
+        const code = r.code;
+        if (!stockByCode[code]) stockByCode[code] = { code, name: r.name, nameCount: {}, sys: 0, count: 0 };
+        const g = stockByCode[code];
+        g.sys += r.profit;
+        g.count += 1;
+        g.nameCount[r.name] = (g.nameCount[r.name] || 0) + 1;
+    });
+    const hasStockCross = STOCK_CROSS && Object.keys(STOCK_CROSS).length > 0;
+    const stockList = Object.keys(stockByCode).map(code => {
+        const g = stockByCode[code];
+        // 显示名称取出现次数最多的（避免OCR变体干扰）
+        let bestName = g.name, bestN = -1;
+        Object.keys(g.nameCount).forEach(nm => { if (g.nameCount[nm] > bestN) { bestN = g.nameCount[nm]; bestName = nm; } });
+        const sys = Math.round(g.sys*100)/100;
+        const cross = (hasStockCross && STOCK_CROSS[code]) ? Math.round(STOCK_CROSS[code].cross*100)/100 : 0;
+        return { name: bestName, code, profit: sys, cross: cross, corrected: Math.round((sys + cross)*100)/100, count: g.count };
+    }).sort((a,b) => b.corrected - a.corrected);
     const chartsArea = document.getElementById('chartsArea');
     chartsArea.innerHTML = `
         <div class="chart-section"><h2 class="chart-title">📈 月度盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（三柱：系统现有 / 月度跨天释放 / 修正后总额；点击柱体钻取月度明细）</span></h2><div id="chartMonth" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">📅 每日盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取日度明细）</span></h2><div id="chartDaily" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">💰 累计收益曲线</h2><div id="chartCumulative" class="chart-wrap"></div></div>
-        <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏排行 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体查看个股明细）</span></h2><div id="chartStockBar" class="chart-wrap"></div></div>
-        <div class="chart-section"><h2 class="chart-title">🥧 盈亏构成分析 <span style="font-size:13px;color:#999;font-weight:normal">（盈利 vs 亏损分布）</span></h2><div id="chartStockPie" class="chart-wrap"></div></div>`;
+        <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏排行 <span style="font-size:13px;color:#999;font-weight:normal">（三柱：系统现有 / 月度跨天释放 / 修正后总额；点击柱体查看个股明细）</span></h2><div id="chartStockBar" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">🥧 盈亏构成分析 <span style="font-size:13px;color:#999;font-weight:normal">（修正后=系统现有+跨天释放，按个股真实盈亏分布）</span></h2><div id="chartStockPie" class="chart-wrap"></div></div>`;
     document.getElementById('detailSection').innerHTML = '';
     const mc = mkChart('chartMonth');
     mc.setOption({
@@ -736,30 +752,45 @@ function renderOverview() {
         series: [{ type:'line', data: cumulative, smooth:true, itemStyle:{ color:'#667eea' }, areaStyle:{ color:{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(102,126,234,0.35)'},{offset:1,color:'rgba(102,126,234,0.02)'}]}}, markPoint:{ data: markPts }, markLine:{ data:[{type:'average',name:'平均'}] } }]
     });
     const sb = mkChart('chartStockBar');
-    // 股票超过15只时，隐藏盈亏±50以内的票
-    const sbList = stockList.length > 15 ? stockList.filter(s => Math.abs(s.profit) > 50) : stockList;
+    // 股票超过15只时，隐藏修正后盈亏±50以内的票
+    const sbList = stockList.length > 15 ? stockList.filter(s => Math.abs(s.corrected) > 50) : stockList;
     const sbHidden = stockList.length - sbList.length;
+    const sbSys = sbList.map(s=>s.profit);
+    const sbCross = sbList.map(s=>s.cross);
+    const sbCorrected = sbList.map(s=>s.corrected);
+    const sbCodes = sbList.map(s=>s.code);
     sb.setOption({
-        tooltip: { trigger:'axis', formatter: p => p[0].name+'<br/>盈亏：'+fmtMoney(p[0].value,true) },
+        tooltip: { trigger:'axis', formatter: function(p){
+            let s = p[0].name+'<br/>';
+            p.forEach(it => { s += it.marker + it.seriesName + '：' + fmtMoney(it.value,true) + '<br/>'; });
+            return s;
+        } },
+        legend: { data:['系统现有盈亏','月度跨天释放','修正后总额'], top: 4, textStyle:{color:'#555', fontSize:12} },
         grid: { left:'3%', right:'4%', bottom:'15%', containLabel:true },
         xAxis: { type:'category', data: sbList.map(s=>s.name), axisLabel:{color:'#555', rotate:30} },
         yAxis: { type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
-        series: [{ type:'bar', data: sbList.map(s=>s.profit), itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:10 } }]
+        series: [
+            { name:'系统现有盈亏', type:'bar', data: sbSys, barGap:'10%', itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:9 } },
+            { name:'月度跨天释放', type:'bar', data: sbCross, itemStyle:{ color:'#2f80ed' }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#2f80ed', fontSize:9 } },
+            { name:'修正后总额', type:'bar', data: sbCorrected, itemStyle:{ color:'#9b51e0' }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#9b51e0', fontSize:9 } }
+        ]
     });
-    sb.on('click', p => drillTo('stock', p.name));
+    sb.on('click', p => drillTo('stock', sbCodes[p.dataIndex]));
     if (sbHidden > 0) {
         const sbTitle = document.querySelector('#chartStockBar').closest('.chart-section').querySelector('.chart-title');
-        if (sbTitle) sbTitle.innerHTML += ' <span style="font-size:13px;color:#999;font-weight:normal">（已隐藏' + sbHidden + '只盈亏±50元以内股票）</span>';
+        if (sbTitle) sbTitle.innerHTML += ' <span style="font-size:13px;color:#999;font-weight:normal">（已隐藏' + sbHidden + '只修正后盈亏±50元以内股票）</span>';
     }
     const sp = mkChart('chartStockPie');
-    const winStocks = stockList.filter(s => s.profit > 0);
-    const loseStocks = stockList.filter(s => s.profit < 0);
+    // 使用修正后（系统现有+跨天释放）作为真实盈亏口径，纳入跨天数据
+    const pieStocks = stockList.filter(s => Math.abs(s.corrected) >= 0.01);
+    const winStocks = pieStocks.filter(s => s.corrected > 0);
+    const loseStocks = pieStocks.filter(s => s.corrected < 0);
     let pieData = [];
     winStocks.forEach(s => {
-        pieData.push({name: s.name + ' (盈)', value: s.profit, itemStyle:{color: '#e74c3c'}});
+        pieData.push({name: s.name + ' (盈)', value: s.corrected, code: s.code, itemStyle:{color: '#e74c3c'}});
     });
     loseStocks.forEach(s => {
-        pieData.push({name: s.name + ' (亏)', value: Math.abs(s.profit), itemStyle:{color: '#27ae60'}});
+        pieData.push({name: s.name + ' (亏)', value: Math.abs(s.corrected), code: s.code, itemStyle:{color: '#27ae60'}});
     });
     sp.setOption({
         tooltip:{ trigger:'item', formatter: function(p) {
@@ -783,7 +814,7 @@ function renderOverview() {
     });
     sp.on('click', p => {
         const rawName = p.name.replace(' (盈)', '').replace(' (亏)', '');
-        drillTo('stock', rawName);
+        drillTo('stock', p.data.code || rawName);
     });
 }
 function renderMonthView() {
@@ -862,7 +893,7 @@ function renderDayView() {
 function renderStockView() {
     const allFiltered = getFilteredRecords();
     const stockName = state.drillParam;
-    const recs = allFiltered.filter(r => r.name === stockName);
+    const recs = allFiltered.filter(r => r.name === stockName || r.code === stockName);
     if (recs.length === 0) { goBack(); return; }
     const totalProfit = sumField(recs, 'profit');
     const totalBuy = sumField(recs, 'buyAmount');

@@ -1425,6 +1425,29 @@ def compute_monthly_cross():
         return {}
 
 
+def compute_stock_cross():
+    """复用跨天配对分析脚本，算每只股票全周期的跨天释放盈亏，用于汇总报告个股图。
+    返回 {code: {'name':..,'cross':..}}（cross=各月跨天释放合计）。失败返回空字典，前端自动降级。"""
+    try:
+        import importlib
+        kt = importlib.import_module('跨天配对分析')
+        df = kt.load()
+        agg = {}
+        for ym in sorted(df['ym'].unique()):
+            r = kt.analyze(df[df['ym'] == ym])
+            for c in r['cross']:
+                code = c['code']
+                if code not in agg:
+                    agg[code] = {'code': code, 'name': c['name'], 'cross': 0.0}
+                agg[code]['cross'] += c['net']
+        for code in agg:
+            agg[code]['cross'] = round(agg[code]['cross'], 2)
+        return agg
+    except Exception as e:
+        print(f"[warn] 个股跨天数据计算失败，降级为仅显示系统现有盈亏：{e}")
+        return {}
+
+
 def generate_summary_html():
     """生成交互式汇总可视化HTML报告"""
     if not os.path.exists(EXCEL_OUTPUT):
@@ -1478,6 +1501,10 @@ def generate_summary_html():
     # 月度跨天三柱图数据（系统现有 / 跨天释放 / 修正后），与跨天配对脚本口径一致
     monthly_cross = compute_monthly_cross()
     html_content = html_content.replace('{__MONTHLY_CROSS__}', json.dumps(monthly_cross, ensure_ascii=False))
+
+    # 个股跨天数据（按证券代码聚合全周期跨天释放），用于个股排行/盈亏构成图
+    stock_cross = compute_stock_cross()
+    html_content = html_content.replace('{__STOCK_CROSS__}', json.dumps(stock_cross, ensure_ascii=False))
 
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
