@@ -185,7 +185,7 @@ body {
     </div>
 
     <div class="footer">
-        <p>报告生成时间：2026-07-23 16:52:38 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
+        <p>报告生成时间：2026-07-23 16:55:44 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
     </div>
 </div>
 <script>
@@ -198,12 +198,12 @@ let navStack = [];
 const chartMap = {};
 function fmtMoney(n, sign) {
     const neg = n < 0;
-    const s = neg ? '（-）' : (sign ? '+' : '');
+    const s = neg ? '-' : (sign ? '+' : '');
     return s + '¥' + Math.abs(n).toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 function fmtPct(n, sign) {
     const neg = n < 0;
-    const s = neg ? '（-）' : (sign ? '+' : '');
+    const s = neg ? '-' : (sign ? '+' : '');
     return s + Math.abs(n).toFixed(2) + '%';
 }
 function profitColor(v) { return v >= 0 ? '#e74c3c' : '#27ae60'; }
