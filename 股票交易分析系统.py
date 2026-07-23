@@ -1436,10 +1436,18 @@ def compute_stock_cross():
         for ym in sorted(df['ym'].unique()):
             r = kt.analyze(df[df['ym'] == ym])
             for c in r['cross']:
-                code = c['code']
+                raw_code = c['code']
+                # 归一化为干净的整数串：跨天脚本从 Excel 读出的证券代码可能是
+                # np.float64（如 300014.0），json.dumps 后变成 "300014.0"，
+                # 与汇总表主程序读出的 "300014" 对不上，导致 STOCK_CROSS[code]
+                # 全部 undefined、跨天释放全部显示为 0。这里统一成整数字符串。
+                try:
+                    code = str(int(float(raw_code)))
+                except (ValueError, TypeError):
+                    code = str(raw_code)
                 if code not in agg:
                     agg[code] = {'code': code, 'name': c['name'], 'cross': 0.0}
-                agg[code]['cross'] += c['net']
+                agg[code]['cross'] += float(c['net'])
         for code in agg:
             agg[code]['cross'] = round(agg[code]['cross'], 2)
         return agg
@@ -1464,10 +1472,15 @@ def generate_summary_html():
     import json
     records = []
     for _, row in df.iterrows():
+        # 归一化证券代码为整数串，避免 Excel 读出 float（300014.0）导致与跨天脚本键错位
+        try:
+            rec_code = str(int(float(row['证券代码'])))
+        except (ValueError, TypeError):
+            rec_code = str(row['证券代码'])
         records.append({
             'date': str(row['日期']),
             'source': str(row['数据来源']),
-            'code': str(row['证券代码']),
+            'code': rec_code,
             'name': str(row['证券名称']),
             'buyQty': int(row['买入数量']),
             'sellQty': int(row['卖出数量']),
