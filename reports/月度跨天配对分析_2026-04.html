@@ -1,0 +1,68 @@
+
+    <!DOCTYPE html>
+    <html lang="zh-CN"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>2026-04 月度跨天配对分析</title>
+    <style>
+      body{font-family:-apple-system,"Microsoft YaHei",sans-serif;background:#f5f6f8;color:#222;margin:0;padding:24px;}
+      h1{font-size:24px;margin:0 0 16px;color:#1a1a1a;}
+      h2{font-size:19px;border-left:4px solid #d4380d;padding-left:10px;margin:24px 0 12px;}
+      h3{font-size:15px;color:#555;margin:18px 0 8px;}
+      .overview,.block{background:#fff;border-radius:10px;padding:18px 20px;margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+      .cards{display:flex;flex-wrap:wrap;gap:12px;}
+      .card{flex:1;min-width:150px;background:#fafafa;border:1px solid #eee;border-radius:8px;padding:12px 14px;}
+      .card .t{font-size:12px;color:#888;margin-bottom:6px;}
+      .card .v{font-size:20px;font-weight:700;}
+      table{width:100%%;border-collapse:collapse;font-size:13px;}
+      th,td{border:1px solid #eee;padding:8px 10px;text-align:center;}
+      th{background:#fafafa;color:#666;font-weight:600;}
+      .hl{color:#d4380d;font-weight:700;}
+      .code{display:block;font-size:11px;color:#aaa;margin-top:2px;}
+      .sub{font-size:11px;color:#999;}
+      .note{color:#b06a00;font-size:12px;}
+      .empty{color:#bbb;padding:14px;}
+      .hint{font-size:12px;color:#888;line-height:1.7;margin-top:12px;}
+      table.small{font-size:12px;}
+    </style></head>
+    <body>
+      <h1>2026-04 月度跨天配对分析</h1>
+      
+    <div class="overview">
+      <h2>总览</h2>
+      <div class="cards">
+        <div class="card"><div class="t">覆盖范围</div><div class="v">2026-04 月度跨天配对分析</div></div>
+        <div class="card"><div class="t">系统现有累计盈亏</div><div class="v" style="color:#d4380d">18,322.84</div></div>
+        <div class="card"><div class="t">跨期配对释放盈亏</div><div class="v" style="color:#d4380d">+0.00</div></div>
+        <div class="card"><div class="t">修正后累计真实盈亏</div><div class="v" style="color:#d4380d">18,322.84</div></div>
+        <div class="card"><div class="t">跨期仍持有持仓数</div><div class="v">0 只</div></div>
+      </div>
+      <p class="hint">说明：跨期配对 = 将范围内每日配对后剩余的零散买入/卖出，按股票整合后用加权均价(WAC)配对。
+      系统现有口径把"未平仓"记为当日交易成本（负数）；修正后口径将其替换为跨期配对的真实净盈亏。红涨绿跌。
+      剩余未匹配持仓已导出为 Excel 文件（见同目录 剩余持仓_*.xlsx）。</p>
+    </div>
+    
+      
+        <div class="block">
+          <h2>月度 2026-04</h2>
+          <div class="cards">
+            <div class="card"><div class="t">系统现有口径盈亏</div><div class="v" style="color:#d4380d">18,322.84</div></div>
+            <div class="card"><div class="t">跨期配对释放盈亏</div><div class="v" style="color:#d4380d">+0.00</div></div>
+            <div class="card"><div class="t">修正后真实盈亏</div><div class="v" style="color:#d4380d">18,322.84</div></div>
+            <div class="card"><div class="t">较现有偏差</div><div class="v" style="color:#d4380d">+0.00</div></div>
+            </div>
+          <h3>跨期配对明细（未平仓买卖整合匹配）</h3>
+          <table>
+            <thead><tr><th>股票</th><th>跨期买入剩余</th><th>跨期卖出剩余</th><th>跨期匹配</th><th>毛盈亏</th><th>交易成本</th><th>跨期净盈亏</th></tr></thead>
+            <tbody><tr><td colspan="7" class="empty">该范围无非当日配对的跨期买卖，无需整合</td></tr></tbody>
+          </table>
+          <h3>跨期仍完全未平仓持仓（已导出Excel）</h3>
+          <table class="small">
+            <thead><tr><th>股票</th><th>剩余买入</th><th>说明</th></tr></thead>
+            <tbody><tr><td colspan="3" class="empty">无跨期仍持有的未平仓持仓</td></tr></tbody>
+          </table>
+        </div>
+        
+      
+      
+    </body></html>
+    
