@@ -185,7 +185,7 @@ body {
     </div>
 
     <div class="footer">
-        <p>报告生成时间：2026-07-31 16:04:17 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
+        <p>报告生成时间：2026-07-31 16:09:55 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
     </div>
 </div>
 <script>
@@ -752,8 +752,8 @@ function renderOverview() {
     if (cumulative.length > 0) {
         const maxIdx = cumulative.indexOf(maxCum);
         const minIdx = cumulative.indexOf(minCum);
-        markPts.push({ coord: [days[maxIdx], maxCum], value: '最高 ¥'+maxCum.toFixed(0), itemStyle: { color: '#e67e22' }, label: { color: '#fff', fontSize: 10, position: 'top' } });
-        markPts.push({ coord: [days[minIdx], minCum], value: '最低 ¥'+minCum.toFixed(0), itemStyle: { color: '#3498db' }, label: { color: '#fff', fontSize: 10, position: 'bottom' } });
+        markPts.push({ xAxis: days[maxIdx], yAxis: maxCum, value: '最高 ¥'+maxCum.toFixed(0), itemStyle: { color: '#e67e22' }, label: { color: '#fff', fontSize: 10, position: 'top' } });
+        markPts.push({ xAxis: days[minIdx], yAxis: minCum, value: '最低 ¥'+minCum.toFixed(0), itemStyle: { color: '#3498db' }, label: { color: '#fff', fontSize: 10, position: 'bottom' } });
     }
     // 最大回撤（累计收益从峰值到谷值的最大跌幅）
     let ddPeakIdx = 0, ddTroughIdx = 0, ddMax = 0, ddRunPeak = cumulative[0] || 0, ddRunPeakIdx = 0;
@@ -765,7 +765,7 @@ function renderOverview() {
     let ddArea = [];
     if (ddMax > 0) {
         ddArea = [{ xAxis: days[ddPeakIdx] }, { xAxis: days[ddTroughIdx] }];
-        markPts.push({ coord: [days[ddTroughIdx], cumulative[ddTroughIdx]], value: '最大回撤\n' + fmtMoney(-ddMax, true), itemStyle: { color: '#e74c3c' }, label: { color: '#fff', fontSize: 10 } });
+        markPts.push({ xAxis: days[ddTroughIdx], yAxis: cumulative[ddTroughIdx], value: '最大回撤\n' + fmtMoney(-ddMax, true), itemStyle: { color: '#e74c3c' }, label: { color: '#fff', fontSize: 10 } });
     }
     cc.setOption({
         tooltip: { trigger:'axis', formatter: p => p[0].name+'<br/>累计：'+fmtMoney(p[0].value,true) },
@@ -781,8 +781,8 @@ function renderOverview() {
         if (monthCorrectedCum.length > 0) {
             const maxIdx = monthCorrectedCum.indexOf(mcmMax);
             const minIdx = monthCorrectedCum.indexOf(mcmMin);
-            mcmPts.push({ coord: [months[maxIdx]+'月', mcmMax], value: '最高 ¥'+mcmMax.toFixed(0), itemStyle: { color: '#e67e22' }, label: { color: '#fff', fontSize: 10, position: 'top' } });
-            mcmPts.push({ coord: [months[minIdx]+'月', mcmMin], value: '最低 ¥'+mcmMin.toFixed(0), itemStyle: { color: '#3498db' }, label: { color: '#fff', fontSize: 10, position: 'bottom' } });
+            mcmPts.push({ xAxis: months[maxIdx]+'月', yAxis: mcmMax, value: '最高 ¥'+mcmMax.toFixed(0), itemStyle: { color: '#e67e22' }, label: { color: '#fff', fontSize: 10, position: 'top' } });
+            mcmPts.push({ xAxis: months[minIdx]+'月', yAxis: mcmMin, value: '最低 ¥'+mcmMin.toFixed(0), itemStyle: { color: '#3498db' }, label: { color: '#fff', fontSize: 10, position: 'bottom' } });
         }
         // 最大回撤（月度累计修正后：从峰值到谷值的最大跌幅）
         let mcDdPeakIdx = 0, mcDdTroughIdx = 0, mcDdMax = 0, mcRunPeak = monthCorrectedCum[0] || 0, mcRunPeakIdx = 0;
@@ -794,7 +794,7 @@ function renderOverview() {
         let mcDdArea = [];
         if (mcDdMax > 0) {
             mcDdArea = [{ xAxis: months[mcDdPeakIdx]+'月' }, { xAxis: months[mcDdTroughIdx]+'月' }];
-            mcmPts.push({ coord: [months[mcDdTroughIdx]+'月', monthCorrectedCum[mcDdTroughIdx]], value: '最大回撤\n' + fmtMoney(-mcDdMax, true), itemStyle: { color: '#e74c3c' }, label: { color: '#fff', fontSize: 10 } });
+            mcmPts.push({ xAxis: months[mcDdTroughIdx]+'月', yAxis: monthCorrectedCum[mcDdTroughIdx], value: '最大回撤\n' + fmtMoney(-mcDdMax, true), itemStyle: { color: '#e74c3c' }, label: { color: '#fff', fontSize: 10 } });
         }
         mcc.setOption({
             tooltip: { trigger:'axis', formatter: function(p){
