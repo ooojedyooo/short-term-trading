@@ -185,7 +185,7 @@ body {
     </div>
 
     <div class="footer">
-        <p>报告生成时间：2026-07-31 16:43:47 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
+        <p>报告生成时间：2026-07-31 17:00:58 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
     </div>
 </div>
 <script>
@@ -748,12 +748,13 @@ function renderOverview() {
     dc.on('click', p => drillTo('day', p.name));
     const cc = mkChart('chartCumulative');
     const maxCum = Math.max(...cumulative), minCum = Math.min(...cumulative);
+    const mkLbl = (pos) => ({ show: true, formatter: '{b}', color: '#fff', fontSize: 10, position: pos || 'inside' });
     let markPts = [];
     if (cumulative.length > 0) {
         const maxIdx = cumulative.indexOf(maxCum);
         const minIdx = cumulative.indexOf(minCum);
-        markPts.push({ name: '最高 ¥'+maxCum.toFixed(0), value: maxCum, xAxis: days[maxIdx], yAxis: maxCum, itemStyle: { color: '#e67e22' }, label: { color: '#fff', fontSize: 10, position: 'top' } });
-        markPts.push({ name: '最低 ¥'+minCum.toFixed(0), value: minCum, xAxis: days[minIdx], yAxis: minCum, itemStyle: { color: '#3498db' }, label: { color: '#fff', fontSize: 10, position: 'bottom' } });
+        markPts.push({ name: '最高 ¥'+maxCum.toFixed(0), xAxis: days[maxIdx], yAxis: maxCum, itemStyle: { color: '#e67e22' }, label: mkLbl('top') });
+        markPts.push({ name: '最低 ¥'+minCum.toFixed(0), xAxis: days[minIdx], yAxis: minCum, itemStyle: { color: '#3498db' }, label: mkLbl('bottom') });
     }
     // 最大回撤（累计收益从峰值到谷值的最大跌幅）
     let ddPeakIdx = 0, ddTroughIdx = 0, ddMax = 0, ddRunPeak = cumulative[0] || 0, ddRunPeakIdx = 0;
@@ -765,24 +766,25 @@ function renderOverview() {
     let ddArea = [];
     if (ddMax > 0) {
         ddArea = [[{ xAxis: days[ddPeakIdx] }, { xAxis: days[ddTroughIdx] }]];
-        markPts.push({ name: '最大回撤\n' + fmtMoney(-ddMax, true), value: cumulative[ddTroughIdx], xAxis: days[ddTroughIdx], yAxis: cumulative[ddTroughIdx], itemStyle: { color: '#e74c3c' }, label: { color: '#fff', fontSize: 10 } });
+        markPts.push({ name: '最大回撤\n' + fmtMoney(-ddMax, true), xAxis: days[ddTroughIdx], yAxis: cumulative[ddTroughIdx], itemStyle: { color: '#e74c3c' }, label: mkLbl('inside') });
     }
     cc.setOption({
         tooltip: { trigger:'axis', formatter: p => p[0].name+'<br/>累计：'+fmtMoney(p[0].value,true) },
         xAxis: { type:'category', data: days, axisLabel:{color:'#555', rotate:45} },
         yAxis: { type:'value', name:'累计收益（元）', axisLabel:{formatter:'¥{value}'} },
-        series: [{ type:'line', data: cumulative, smooth:true, itemStyle:{ color:'#667eea' }, areaStyle:{ color:{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(102,126,234,0.35)'},{offset:1,color:'rgba(102,126,234,0.02)'}]}}, markPoint:{ data: markPts }, markArea:{ itemStyle:{ color:'rgba(231,76,60,0.12)' }, data: ddArea } }]
+        series: [{ type:'line', data: cumulative, smooth:true, itemStyle:{ color:'#667eea' }, areaStyle:{ color:{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(102,126,234,0.35)'},{offset:1,color:'rgba(102,126,234,0.02)'}]}}, markPoint:{ data: markPts, label: { show: true, formatter: '{b}', color: '#fff', fontSize: 10 } }, markArea:{ itemStyle:{ color:'rgba(231,76,60,0.12)' }, data: ddArea } }]
     });
     // 月度累计修正后收益曲线（仅跨度>1月时显示）
     if (showMonthlyCurve) {
         const mcc = mkChart('chartMonthlyCum');
         const mcmMax = Math.max(...monthCorrectedCum), mcmMin = Math.min(...monthCorrectedCum);
+        const mkMcLbl = (pos) => ({ show: true, formatter: '{b}', color: '#fff', fontSize: 10, position: pos || 'inside' });
         const mcmPts = [];
         if (monthCorrectedCum.length > 0) {
             const maxIdx = monthCorrectedCum.indexOf(mcmMax);
             const minIdx = monthCorrectedCum.indexOf(mcmMin);
-            mcmPts.push({ name: '最高 ¥'+mcmMax.toFixed(0), value: mcmMax, xAxis: months[maxIdx]+'月', yAxis: mcmMax, itemStyle: { color: '#e67e22' }, label: { color: '#fff', fontSize: 10, position: 'top' } });
-            mcmPts.push({ name: '最低 ¥'+mcmMin.toFixed(0), value: mcmMin, xAxis: months[minIdx]+'月', yAxis: mcmMin, itemStyle: { color: '#3498db' }, label: { color: '#fff', fontSize: 10, position: 'bottom' } });
+            mcmPts.push({ name: '最高 ¥'+mcmMax.toFixed(0), xAxis: months[maxIdx]+'月', yAxis: mcmMax, itemStyle: { color: '#e67e22' }, label: mkMcLbl('top') });
+            mcmPts.push({ name: '最低 ¥'+mcmMin.toFixed(0), xAxis: months[minIdx]+'月', yAxis: mcmMin, itemStyle: { color: '#3498db' }, label: mkMcLbl('bottom') });
         }
         // 最大回撤（月度累计修正后：从峰值到谷值的最大跌幅）
         let mcDdPeakIdx = 0, mcDdTroughIdx = 0, mcDdMax = 0, mcRunPeak = monthCorrectedCum[0] || 0, mcRunPeakIdx = 0;
@@ -794,7 +796,7 @@ function renderOverview() {
         let mcDdArea = [];
         if (mcDdMax > 0) {
             mcDdArea = [[{ xAxis: months[mcDdPeakIdx]+'月' }, { xAxis: months[mcDdTroughIdx]+'月' }]];
-            mcmPts.push({ name: '最大回撤\n' + fmtMoney(-mcDdMax, true), value: monthCorrectedCum[mcDdTroughIdx], xAxis: months[mcDdTroughIdx]+'月', yAxis: monthCorrectedCum[mcDdTroughIdx], itemStyle: { color: '#e74c3c' }, label: { color: '#fff', fontSize: 10 } });
+            mcmPts.push({ name: '最大回撤\n' + fmtMoney(-mcDdMax, true), xAxis: months[mcDdTroughIdx]+'月', yAxis: monthCorrectedCum[mcDdTroughIdx], itemStyle: { color: '#e74c3c' }, label: mkMcLbl('inside') });
         }
         mcc.setOption({
             tooltip: { trigger:'axis', formatter: function(p){
@@ -803,7 +805,7 @@ function renderOverview() {
             }},
             xAxis: { type:'category', data: months.map(m => m+'月'), axisLabel:{color:'#555'} },
             yAxis: { type:'value', name:'累计修正后收益（元）', axisLabel:{formatter:'¥{value}'} },
-            series: [{ type:'line', data: monthCorrectedCum, smooth:true, itemStyle:{ color:'#e67e22' }, areaStyle:{ color:{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(230,126,34,0.32)'},{offset:1,color:'rgba(230,126,34,0.02)'}]}}, markPoint:{ data: mcmPts }, markArea:{ itemStyle:{ color:'rgba(231,76,60,0.12)' }, data: mcDdArea } }]
+            series: [{ type:'line', data: monthCorrectedCum, smooth:true, itemStyle:{ color:'#e67e22' }, areaStyle:{ color:{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(230,126,34,0.32)'},{offset:1,color:'rgba(230,126,34,0.02)'}]}}, markPoint:{ data: mcmPts, label: { show: true, formatter: '{b}', color: '#fff', fontSize: 10 } }, markArea:{ itemStyle:{ color:'rgba(231,76,60,0.12)' }, data: mcDdArea } }]
         });
         mcc.on('click', p => drillTo('month', p.name.replace('月','')));
     }
