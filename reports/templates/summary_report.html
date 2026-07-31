@@ -681,6 +681,9 @@ function renderOverview() {
     const monthSys = months.map((m,i) => hasCross ? (crossMap[m] ? crossMap[m].sys : 0) : monthProfits[i]);
     const monthCross = months.map(m => hasCross && crossMap[m] ? crossMap[m].cross : 0);
     const monthCorrected = months.map((m,i) => hasCross ? (crossMap[m] ? crossMap[m].corrected : monthProfits[i]) : monthProfits[i]);
+    // 各月修正后总额逐月累加（用于“月度累计修正后收益曲线”）
+    const monthCorrectedCum = [];
+    { let runC = 0; monthCorrected.forEach(v => { runC += v; monthCorrectedCum.push(Math.round(runC*100)/100); }); }
     const dayGroups = groupBy(recs, 'date');
     const days = Object.keys(dayGroups).sort();
     const dayProfits = days.map(d => Math.round(sumField(dayGroups[d],'profit')*100)/100);
@@ -706,11 +709,14 @@ function renderOverview() {
         const cross = (hasStockCross && STOCK_CROSS[code]) ? Math.round(STOCK_CROSS[code].cross*100)/100 : 0;
         return { name: bestName, code, profit: sys, cross: cross, corrected: Math.round((sys + cross)*100)/100, count: g.count };
     }).sort((a,b) => b.corrected - a.corrected);
+    // “月度累计修正后收益曲线”：跨度>1个月（本年/全部/自定义）时显示，仿照累计收益曲线，横轴按月、数据为月度修正后总额逐月累加
+    const showMonthlyCurve = months.length > 1;
     const chartsArea = document.getElementById('chartsArea');
     chartsArea.innerHTML = `
         <div class="chart-section"><h2 class="chart-title">📈 月度盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（三柱：系统现有 / 月度跨天释放 / 修正后总额；点击柱体钻取月度明细）</span></h2><div id="chartMonth" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">📅 每日盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取日度明细）</span></h2><div id="chartDaily" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">💰 累计收益曲线</h2><div id="chartCumulative" class="chart-wrap"></div></div>
+        ${showMonthlyCurve ? `<div class="chart-section"><h2 class="chart-title">📆 月度累计修正后收益曲线 <span style="font-size:13px;color:#999;font-weight:normal">（横轴按月，逐月累加“月度修正后总额”，数据口径与月度趋势三柱一致）</span></h2><div id="chartMonthlyCum" class="chart-wrap"></div></div>` : ''}
         <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏排行 <span style="font-size:13px;color:#999;font-weight:normal">（三柱：系统现有 / 月度跨天释放 / 修正后总额；点击柱体查看个股明细）</span></h2><div id="chartStockBar" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">🥧 盈亏构成分析 <span style="font-size:13px;color:#999;font-weight:normal">（修正后=系统现有+跨天释放，按个股真实盈亏分布）</span></h2><div id="chartStockPie" class="chart-wrap"></div></div>`;
     document.getElementById('detailSection').innerHTML = '';
@@ -753,6 +759,26 @@ function renderOverview() {
         yAxis: { type:'value', name:'累计收益（元）', axisLabel:{formatter:'¥{value}'} },
         series: [{ type:'line', data: cumulative, smooth:true, itemStyle:{ color:'#667eea' }, areaStyle:{ color:{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(102,126,234,0.35)'},{offset:1,color:'rgba(102,126,234,0.02)'}]}}, markPoint:{ data: markPts }, markLine:{ data:[{type:'average',name:'平均'}] } }]
     });
+    // 月度累计修正后收益曲线（仅跨度>1月时显示）
+    if (showMonthlyCurve) {
+        const mcc = mkChart('chartMonthlyCum');
+        const mcmMax = Math.max(...monthCorrectedCum), mcmMin = Math.min(...monthCorrectedCum);
+        const mcmPts = [];
+        if (monthCorrectedCum.length > 0) {
+            mcmPts.push({type:'max', name:'最高 ¥'+mcmMax.toFixed(0)});
+            mcmPts.push({type:'min', name:'最低 ¥'+mcmMin.toFixed(0)});
+        }
+        mcc.setOption({
+            tooltip: { trigger:'axis', formatter: function(p){
+                const i = p[0].dataIndex;
+                return p[0].name + '<br/>当月修正后：' + fmtMoney(monthCorrected[i],true) + '<br/>累计修正后：' + fmtMoney(p[0].value,true);
+            }},
+            xAxis: { type:'category', data: months.map(m => m+'月'), axisLabel:{color:'#555'} },
+            yAxis: { type:'value', name:'累计修正后收益（元）', axisLabel:{formatter:'¥{value}'} },
+            series: [{ type:'line', data: monthCorrectedCum, smooth:true, itemStyle:{ color:'#e67e22' }, areaStyle:{ color:{ type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(230,126,34,0.32)'},{offset:1,color:'rgba(230,126,34,0.02)'}]}}, markPoint:{ data: mcmPts }, markLine:{ data:[{type:'average',name:'平均'}] } }]
+        });
+        mcc.on('click', p => drillTo('month', p.name.replace('月','')));
+    }
     const sb = mkChart('chartStockBar');
     // 股票超过15只时，隐藏修正后盈亏±50以内的票
     const sbList = stockList.length > 15 ? stockList.filter(s => Math.abs(s.corrected) > 50) : stockList;
