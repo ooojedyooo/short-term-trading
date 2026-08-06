@@ -139,7 +139,21 @@ body {
     .tab-nav { overflow-x: auto; }
     .tab-btn { padding: 12px 16px; font-size: 14px; }
 }
-    </style>
+        /* 跨天配对分析表格 */
+    .cross-header h2 { font-size: 20px; color: #2c3e50; margin-bottom: 4px; }
+    .cross-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px; }
+    .cross-table th, .cross-table td { padding: 10px 12px; text-align: right; border-bottom: 1px solid #eee; }
+    .cross-table th { background: #f9fafb; color: #555; font-weight: 600; border-bottom: 2px solid #e0e0e0; }
+    .cross-table th:first-child, .cross-table td:first-child { text-align: left; }
+    .cross-table tbody tr:hover { background: #f5f7ff; }
+    .cross-month-row { cursor: pointer; }
+    .cross-month-row td:first-child { font-weight: 600; }
+    .cross-month-detail td { padding: 0; }
+    .cross-inner-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+    .cross-inner-table th, .cross-inner-table td { padding: 6px 10px; text-align: right; border-bottom: 1px solid #eee; }
+    .cross-inner-table th { background: #f0f4ff; color: #555; font-size: 11px; }
+    .cross-inner-table th:first-child, .cross-inner-table td:first-child { text-align: left; }
+</style>
 </head>
 <body>
 <div class="container">
@@ -154,6 +168,8 @@ body {
         <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">📈 汇总概览</button>
         <button class="tab-btn" data-tab="stocks" onclick="switchTab('stocks')">🏆 个股总览</button>
         <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">📅 盈亏日历</button>
+        <button class="tab-btn" data-tab="monthly_cross" onclick="switchTab('monthly_cross')">📆 月度跨天</button>
+        <button class="tab-btn" data-tab="yearly_cross" onclick="switchTab('yearly_cross')">📅 年度跨天</button>
     </div>
     <!-- 筛选条 -->
     <div class="filter-bar">
@@ -183,6 +199,12 @@ body {
     <div class="page-container" id="pageCalendar">
         <div id="calendarContent" style="padding:24px 30px;"></div>
     </div>
+    <div class="page-container" id="pageMonthlyCross">
+        <div id="monthlyCrossContent" style="padding:24px 30px;"></div>
+    </div>
+    <div class="page-container" id="pageYearlyCross">
+        <div id="yearlyCrossContent" style="padding:24px 30px;"></div>
+    </div>
 
     <div class="footer">
         <p>报告生成时间：{__GEN_TIME__} | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
@@ -192,6 +214,8 @@ body {
 const ALL_DATA = {__DATA_JSON__};
 const NOW = '{__NOW_STR__}';
 const MONTHLY_CROSS = {__MONTHLY_CROSS__};
+const MONTHLY_CROSS_DETAIL = {__MONTHLY_CROSS_DETAIL__};
+const YEARLY_CROSS = {__YEARLY_CROSS__};
 const STOCK_CROSS = {__STOCK_CROSS__};
 let state = { view: 'overview', filterType: 'mtd', customStart: '', customEnd: '', drillParam: null, activeTab: 'overview' };
 let navStack = [];
@@ -255,6 +279,12 @@ function switchTab(tab) {
     } else if (tab === 'calendar') {
         document.getElementById('pageCalendar').classList.add('active');
         renderCalendarView();
+    } else if (tab === 'monthly_cross') {
+        document.getElementById('pageMonthlyCross').classList.add('active');
+        renderMonthlyCross();
+    } else if (tab === 'yearly_cross') {
+        document.getElementById('pageYearlyCross').classList.add('active');
+        renderYearlyCross();
     }
 }
 function setFilter(type) {
@@ -269,6 +299,8 @@ function setFilter(type) {
     render();
     if (state.activeTab === 'stocks') renderStocksOverview();
     if (state.activeTab === 'calendar') renderCalendarView();
+    if (state.activeTab === 'monthly_cross') renderMonthlyCross();
+    if (state.activeTab === 'yearly_cross') renderYearlyCross();
 }
 function applyCustomFilter() {
     state.customStart = document.getElementById('startDate').value;
@@ -277,6 +309,8 @@ function applyCustomFilter() {
         state.view = 'overview'; state.drillParam = null; navStack = []; render();
         if (state.activeTab === 'stocks') renderStocksOverview();
         if (state.activeTab === 'calendar') renderCalendarView();
+        if (state.activeTab === 'monthly_cross') renderMonthlyCross();
+        if (state.activeTab === 'yearly_cross') renderYearlyCross();
     }
 }
 function drillTo(view, param) {
@@ -671,7 +705,13 @@ function renderOverview() {
         document.getElementById('detailSection').innerHTML = '';
         return;
     }
-    renderStats(computeStats(recs));
+    const stats = computeStats(recs);
+    if (state.filterType === 'ytd' && YEARLY_CROSS && YEARLY_CROSS.yearly_cross_net !== undefined) {
+        const yc = YEARLY_CROSS;
+        stats.push({label: '年度跨月调整', value: fmtMoney(yc.yearly_cross_net, true), cls: profitCls(yc.yearly_cross_net)});
+        stats.push({label: '年度修正后总额', value: fmtMoney(yc.corrected, true), cls: profitCls(yc.corrected)});
+    }
+    renderStats(stats);
     const monthGroups = groupBy(recs, r => r.date.substring(0,7));
     const months = Object.keys(monthGroups).sort();
     const monthProfits = months.map(m => Math.round(sumField(monthGroups[m],'profit')*100)/100);
@@ -1015,6 +1055,97 @@ function renderStockView() {
         });
     }
     renderDetailTable(recs, '📋 ' + stockName + ' 全部交易记录');
+}
+/* ====== 月度跨天配对 ====== */
+function renderMonthlyCross() {
+    const el = document.getElementById('monthlyCrossContent');
+    const detail = (typeof MONTHLY_CROSS_DETAIL !== 'undefined' && Object.keys(MONTHLY_CROSS_DETAIL).length > 0) ? MONTHLY_CROSS_DETAIL : null;
+    if (!detail) {
+        el.innerHTML = '<div class="empty-state">暂无月度跨天配对数据</div>';
+        return;
+    }
+    const months = Object.keys(detail).sort().reverse();
+    let html = '<div class="cross-header"><h2>月度跨天配对分析</h2><p style="color:#999;font-size:13px;">每天分析后的\"月度跨天释放\"汇总。点击月份查看该月内跨天配对的明细条目。</p></div>';
+    html += '<table class="cross-table"><thead><tr><th>月份</th><th>系统现有盈亏</th><th>月度跨天释放</th><th>修正后总额</th><th>配对条目数</th></tr></thead><tbody>';
+    months.forEach(m => {
+        const d = detail[m] || {};
+        const items = d.items || [];
+        const cls = profitCls(d.corrected || 0);
+        html += '<tr class="cross-month-row" onclick="toggleCrossMonth(this,\'' + m + '\')">';
+        html += '<td>' + m + ' <span style="font-size:11px;color:#999;">▶</span></td>';
+        html += '<td class="' + cls + '">' + fmtMoney(d.sys || 0, true) + '</td>';
+        html += '<td class="' + profitCls(d.cross_net || 0) + '">' + fmtMoney(d.cross_net || 0, true) + '</td>';
+        html += '<td class="' + cls + '">' + fmtMoney(d.corrected || 0, true) + '</td>';
+        html += '<td>' + items.length + '笔</td>';
+        html += '</tr>';
+        html += '<tr class="cross-month-detail" id="crossDetail_' + m + '" style="display:none"><td colspan="5">';
+        if (items.length === 0) {
+            html += '<div style="padding:12px;color:#999;">该月无跨天配对（所有买卖均已匹配）</div>';
+        } else {
+            html += '<table class="cross-inner-table"><thead><tr><th>股票</th><th>买入量</th><th>买入均价</th><th>卖出量</th><th>卖出均价</th><th>配对量</th><th>跨天净盈亏</th></tr></thead><tbody>';
+            items.forEach(it => {
+                const icls = profitCls(it.net);
+                html += '<tr><td>' + it.name + ' (' + it.code + ')</td>';
+                html += '<td>' + it.buy_q + '</td><td>¥' + it.buy_avg.toFixed(3) + '</td>';
+                html += '<td>' + it.sell_q + '</td><td>¥' + it.sell_avg.toFixed(3) + '</td>';
+                html += '<td>' + it.match + '</td>';
+                html += '<td class="' + icls + '">' + fmtMoney(it.net, true) + '</td></tr>';
+            });
+            html += '</tbody></table>';
+        }
+        html += '</td></tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+    window.scrollTo({top: 0, behavior: 'smooth'});
+}
+function toggleCrossMonth(row, m) {
+    const detail = document.getElementById('crossDetail_' + m);
+    const arrow = row.querySelector('span');
+    if (detail.style.display === 'none') {
+        detail.style.display = ''; arrow.textContent = '▼';
+    } else {
+        detail.style.display = 'none'; arrow.textContent = '▶';
+    }
+}
+/* ====== 年度跨月配对 ====== */
+function renderYearlyCross() {
+    const el = document.getElementById('yearlyCrossContent');
+    const yc = (typeof YEARLY_CROSS !== 'undefined' && YEARLY_CROSS.yearly_cross_net !== undefined) ? YEARLY_CROSS : null;
+    if (!yc) {
+        el.innerHTML = '<div class="empty-state">暂无年度跨月配对数据</div>';
+        return;
+    }
+    let html = '<div class="cross-header">';
+    html += '<h2>年度跨月配对分析（' + (NOW||'').substring(0,4) + '年）</h2>';
+    html += '<p style="color:#999;font-size:13px;">各月剩余持仓按证券代码SUM合并后进行跨月配对，释放盈亏。只计入已匹配的买入卖出，剩余跨年持仓留待下一年。</p>';
+    html += '</div>';
+    // 汇总卡片
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px;">';
+    html += '<div class="stat-card"><div class="label">系统现有盈亏</div><div class="value ' + profitCls(yc.sys_total) + '">' + fmtMoney(yc.sys_total, true) + '</div></div>';
+    html += '<div class="stat-card"><div class="label">月度跨天释放合计</div><div class="value ' + profitCls(yc.monthly_cross_sum) + '">' + fmtMoney(yc.monthly_cross_sum, true) + '</div></div>';
+    html += '<div class="stat-card"><div class="label">年度跨月调整</div><div class="value ' + profitCls(yc.yearly_cross_net) + '">' + fmtMoney(yc.yearly_cross_net, true) + '</div></div>';
+    html += '<div class="stat-card"><div class="label">修正后总额</div><div class="value ' + profitCls(yc.corrected) + '">' + fmtMoney(yc.corrected, true) + '</div></div>';
+    html += '<div class="stat-card"><div class="label">已配对盈亏</div><div class="value ' + profitCls(yc.pair_pnl) + '">' + fmtMoney(yc.pair_pnl, true) + '</div></div>';
+    html += '</div>';
+    // 配对明细表
+    const items = yc.items || [];
+    if (items.length === 0) {
+        html += '<div class="empty-state">暂无跨月配对明细</div>';
+    } else {
+        html += '<table class="cross-table"><thead><tr><th>股票</th><th>买入量</th><th>买入均价</th><th>卖出量</th><th>卖出均价</th><th>配对量</th><th>跨月净盈亏</th></tr></thead><tbody>';
+        items.forEach(it => {
+            const icls = profitCls(it.net);
+            html += '<tr><td>' + it.name + ' (' + it.code + ')</td>';
+            html += '<td>' + it.buy_q + '</td><td>¥' + it.buy_avg.toFixed(3) + '</td>';
+            html += '<td>' + it.sell_q + '</td><td>¥' + it.sell_avg.toFixed(3) + '</td>';
+            html += '<td>' + it.match + '</td>';
+            html += '<td class="' + icls + '">' + fmtMoney(it.net, true) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+    }
+    el.innerHTML = html;
+    window.scrollTo({top: 0, behavior: 'smooth'});
 }
 function render() {
     disposeAll(); renderBreadcrumb();

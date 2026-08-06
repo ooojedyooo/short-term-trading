@@ -1456,6 +1456,99 @@ def compute_stock_cross():
         return {}
 
 
+def compute_monthly_cross_detail():
+    """月度跨天配对详细数据（含每月的跨天配对条目），用于月度跨天tab。
+    返回 {ym: {'sys':..,'cross_net':..,'corrected':..,'items':[{code,name,...}]}}"""
+    try:
+        import importlib; kt = importlib.import_module('跨天配对分析')
+        df = kt.load(); out = {}
+        for ym in sorted(df['ym'].unique()):
+            r = kt.analyze(df[df['ym'] == ym])
+            items = []
+            for c in r['cross']:
+                try:
+                    code = str(int(float(c['code'])))
+                except (ValueError, TypeError):
+                    code = str(c['code'])
+                items.append({
+                    'code': code, 'name': c['name'],
+                    'buy_q': int(c.get('buy_q', 0)), 'sell_q': int(c.get('sell_q', 0)),
+                    'buy_avg': round(float(c.get('buy_avg', 0)), 3),
+                    'sell_avg': round(float(c.get('sell_avg', 0)), 3),
+                    'match': int(c.get('match', 0)), 'net': round(c['net'], 2)
+                })
+            out[ym] = {
+                'sys': round(r['sys_total'], 2), 'cross_net': round(r['cross_net'], 2),
+                'corrected': round(r['corrected'], 2), 'items': items
+            }
+        return out
+    except Exception as e:
+        print(f"[warn] 月度跨天详细数据计算失败：{e}"); return {}
+
+
+def compute_yearly_cross():
+    """年度跨月配对：各月剩余持仓SUM合并后跨月配对，用于年度跨天tab和本年统计卡片。
+    返回 {yearly_cross_net, monthly_cross_sum, corrected, pair_pnl, items:[{code,name,...}]}"""
+    try:
+        import importlib; kt = importlib.import_module('跨天配对分析')
+        df = kt.load()
+        cy = str(datetime.now().year)
+        ym_list = sorted([ym for ym in df['ym'].unique() if ym.startswith(cy)])
+
+        monthly_cross_sum = 0.0
+        remain = {}
+        for ym in ym_list:
+            r = kt.analyze(df[df['ym'] == ym])
+            monthly_cross_sum += r['cross_net']
+            for rem in r['remain']:
+                try:
+                    code = str(int(float(rem['code'])))
+                except (ValueError, TypeError):
+                    code = str(rem['code'])
+                if code not in remain:
+                    remain[code] = {'code': code, 'name': rem['name'],
+                        'buy_q': 0, 'buy_amt': 0.0, 'sell_q': 0, 'sell_amt': 0.0}
+                remain[code]['buy_q'] += int(rem.get('remain_buy', 0))
+                remain[code]['buy_amt'] += float(rem.get('remain_buy_amt', 0) or 0)
+                remain[code]['sell_q'] += int(rem.get('remain_sell', 0))
+                remain[code]['sell_amt'] += float(rem.get('remain_sell_amt', 0) or 0)
+
+        CR, MC, SR = 0.0001, 5.0, 0.0005
+        items = []; cross_net = 0.0
+        for code, d in remain.items():
+            bq, ba, sq, sa = d['buy_q'], d['buy_amt'], d['sell_q'], d['sell_amt']
+            if bq > 0 and sq > 0:
+                m = min(bq, sq)
+                bavg = ba / bq; savg = sa / sq
+                m_bamt = ba * (m / bq); m_samt = sa * (m / sq)
+                gross = m_samt - m_bamt
+                cost = max(m_bamt * CR, MC) + max(m_samt * CR, MC) + m_samt * SR
+                net = gross - cost
+                cross_net += net
+                items.append({
+                    'code': code, 'name': d['name'],
+                    'buy_q': int(bq), 'buy_avg': round(bavg, 3),
+                    'sell_q': int(sq), 'sell_avg': round(savg, 3),
+                    'match': int(m), 'net': round(net, 2)
+                })
+
+        sub = df[df['ym'].str.startswith(cy)]
+        sys_t = sub['盈亏金额'].sum()
+        pair = sub[sub['type'] == 'pair']['盈亏金额'].sum()
+        corrected = pair + monthly_cross_sum + cross_net
+
+        return {
+            'yearly_cross_net': round(cross_net, 2),
+            'monthly_cross_sum': round(monthly_cross_sum, 2),
+            'corrected': round(corrected, 2),
+            'pair_pnl': round(pair, 2),
+            'sys_total': round(sys_t, 2),
+            'items': items
+        }
+    except Exception as e:
+        print(f"[warn] 年度跨天数据计算失败：{e}"); return {}
+
+
 def generate_summary_html():
     """生成交互式汇总可视化HTML报告"""
     if not os.path.exists(EXCEL_OUTPUT):
@@ -1518,6 +1611,14 @@ def generate_summary_html():
     # 个股跨天数据（按证券代码聚合全周期跨天释放），用于个股排行/盈亏构成图
     stock_cross = compute_stock_cross()
     html_content = html_content.replace('{__STOCK_CROSS__}', json.dumps(stock_cross, ensure_ascii=False))
+
+    # 月度跨天详细配对数据（含每月的跨天配对条目），用于月度跨天tab
+    monthly_cross_detail = compute_monthly_cross_detail()
+    html_content = html_content.replace('{__MONTHLY_CROSS_DETAIL__}', json.dumps(monthly_cross_detail, ensure_ascii=False))
+
+    # 年度跨月配对数据（各月剩余SUM合并后跨月配对），用于年度跨天tab + 本年统计卡片
+    yearly_cross = compute_yearly_cross()
+    html_content = html_content.replace('{__YEARLY_CROSS__}', json.dumps(yearly_cross, ensure_ascii=False))
 
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
