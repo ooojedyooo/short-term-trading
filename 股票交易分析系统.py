@@ -120,6 +120,8 @@ STOCK_NAME_CORRECTIONS = {
     '688778': '厦钨新能',
     '300450': '先导智能',
     '601208': '东材科技',
+    '000831': '中国稀土',   # 两融券商导出名"中国稀士"与手机OCR"中国稀土"不统一，强制用标准名
+    '831': '中国稀土',      # 000831 归一化后可能为 '831'
 }
 
 
@@ -319,9 +321,13 @@ def parse_image_trades(image_path):
                 rec['证券名称'] = best_names[code]
             else:
                 rec['证券名称'] = '未知'
-        # 用名称修正表覆盖OCR截断/误读的名称
-        if code in STOCK_NAME_CORRECTIONS:
-            rec['证券名称'] = STOCK_NAME_CORRECTIONS[code]
+        # 用名称修正表覆盖OCR截断/误读的名称（code先归一化为字符串，兼容 int/float/str 三种类型）
+        try:
+            code_key = str(int(float(rec['证券代码'])))
+        except (ValueError, TypeError):
+            code_key = str(rec['证券代码'])
+        if code_key in STOCK_NAME_CORRECTIONS:
+            rec['证券名称'] = STOCK_NAME_CORRECTIONS[code_key]
 
     # OCR数量修正 v4.5.2：用"数量×价格≈金额"来验证OCR读数准确性
     # 如果OCR读的数量不是100整数倍，且用最近100整数倍算出的金额更接近OCR读的金额，则修正
@@ -1821,6 +1827,15 @@ def main():
 
             # 数据校验：检查合理性，打印告警，剔除严重异常行
             merged_df = validate_trades(merged_df, primary_source)
+            # 统一证券名称：两融/平安/手机各来源可能有名称差异（如"中国稀士"vs"中国稀土"），用纠错表强制统一
+            for idx, row in merged_df.iterrows():
+                code_raw = str(row.get('证券代码', '')).strip()
+                try:
+                    code_key = str(int(float(code_raw)))
+                except (ValueError, TypeError):
+                    code_key = code_raw
+                if code_key in STOCK_NAME_CORRECTIONS:
+                    merged_df.at[idx, '证券名称'] = STOCK_NAME_CORRECTIONS[code_key]
             if len(merged_df) == 0:
                 print("  [告警] 校验后无有效记录，跳过盈亏计算")
                 profit_results = []
