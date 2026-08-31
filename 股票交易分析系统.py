@@ -1415,8 +1415,8 @@ def generate_html_report_from_summary(trading_date):
 # ==================== 汇总可视化报告（v3.0 交互式） ====================
 
 def compute_monthly_cross():
-    """复用跨天配对分析脚本，算每月系统现有/跨天释放/修正后，用于汇总报告月度趋势三柱图。
-    返回 {ym: {'sys':..,'cross':..,'corrected':..}}。失败返回空字典，前端自动降级为单柱。"""
+    """复用跨天配对分析脚本，算每月系统现有/当日配对/跨天释放/修正后，用于汇总报告月度趋势四柱图。
+    返回 {ym: {'sys':..,'pair':..,'cross':..,'corrected':..}}。失败返回空字典，前端自动降级为单柱。"""
     try:
         import importlib
         kt = importlib.import_module('跨天配对分析')
@@ -1424,7 +1424,8 @@ def compute_monthly_cross():
         out = {}
         for ym in sorted(df['ym'].unique()):
             r = kt.analyze(df[df['ym'] == ym])
-            out[ym] = {'sys': r['sys_total'], 'cross': r['cross_net'], 'corrected': r['corrected']}
+            out[ym] = {'sys': r['sys_total'], 'pair': r['pair_pnl'],
+                       'cross': r['cross_net'], 'corrected': r['corrected']}
         return out
     except Exception as e:
         print(f"[warn] 月度趋势图跨天数据计算失败，降级为仅显示系统现有盈亏：{e}")
