@@ -715,11 +715,12 @@ function renderOverview() {
     const monthGroups = groupBy(recs, r => r.date.substring(0,7));
     const months = Object.keys(monthGroups).sort();
     const monthProfits = months.map(m => Math.round(sumField(monthGroups[m],'profit')*100)/100);
-    // 月度跨天四柱图数据：系统现有 / 当日配对 / 月度跨天释放 / 修正后总额（与跨天配对脚本口径一致）
+    // 月度跨天五柱图数据：系统现有 / 当日配对 / 未平仓成本 / 月度跨天释放 / 修正后总额（与跨天配对脚本口径一致）
     const crossMap = (typeof MONTHLY_CROSS !== 'undefined') ? MONTHLY_CROSS : {};
     const hasCross = Object.keys(crossMap).length > 0;
     const monthSys = months.map((m,i) => hasCross ? (crossMap[m] ? crossMap[m].sys : 0) : monthProfits[i]);
     const monthPair = months.map(m => hasCross && crossMap[m] ? crossMap[m].pair : 0);
+    const monthUnmatch = months.map(m => hasCross && crossMap[m] ? crossMap[m].unmatch : 0);
     const monthCross = months.map(m => hasCross && crossMap[m] ? crossMap[m].cross : 0);
     const monthCorrected = months.map((m,i) => hasCross ? (crossMap[m] ? crossMap[m].corrected : monthProfits[i]) : monthProfits[i]);
     // 各月修正后总额逐月累加（用于“月度累计修正后收益曲线”）
@@ -754,10 +755,10 @@ function renderOverview() {
     const showMonthlyCurve = months.length > 1;
     const chartsArea = document.getElementById('chartsArea');
     chartsArea.innerHTML = `
-        <div class="chart-section"><h2 class="chart-title">📈 月度盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（四柱：系统现有 / 当日配对 / 月度跨天释放 / 修正后总额；修正后=当日配对+跨天释放；点击柱体钻取月度明细）</span></h2><div id="chartMonth" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">📈 月度盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（五柱：<b>系统现有</b>=当日配对+未平仓成本；<b>修正后</b>=当日配对+跨天释放；点击柱体钻取月度明细）</span></h2><div id="chartMonth" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">📅 每日盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取日度明细）</span></h2><div id="chartDaily" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">💰 累计收益曲线</h2><div id="chartCumulative" class="chart-wrap"></div></div>
-        ${showMonthlyCurve ? `<div class="chart-section"><h2 class="chart-title">📆 月度累计修正后收益曲线 <span style="font-size:13px;color:#999;font-weight:normal">（横轴按月，逐月累加“月度修正后总额”，数据口径与月度趋势四柱一致）</span></h2><div id="chartMonthlyCum" class="chart-wrap"></div></div>` : ''}
+        ${showMonthlyCurve ? `<div class="chart-section"><h2 class="chart-title">📆 月度累计修正后收益曲线 <span style="font-size:13px;color:#999;font-weight:normal">（横轴按月，逐月累加“月度修正后总额”，数据口径与月度趋势五柱一致）</span></h2><div id="chartMonthlyCum" class="chart-wrap"></div></div>` : ''}
         <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏排行 <span style="font-size:13px;color:#999;font-weight:normal">（三柱：系统现有 / 月度跨天释放 / 修正后总额；点击柱体查看个股明细）</span></h2><div id="chartStockBar" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">🥧 盈亏构成分析 <span style="font-size:13px;color:#999;font-weight:normal">（修正后=系统现有+跨天释放，按个股真实盈亏分布）</span></h2><div id="chartStockPie" class="chart-wrap"></div></div>`;
     document.getElementById('detailSection').innerHTML = '';
@@ -768,15 +769,16 @@ function renderOverview() {
             p.forEach(it => { s += it.marker + it.seriesName + '：' + fmtMoney(it.value,true) + '<br/>'; });
             return s;
         }},
-        legend: { data:['系统现有盈亏','当日配对盈亏','月度跨天释放','修正后总额'], top: 4, textStyle:{color:'#555', fontSize:12} },
+        legend: { data:['系统现有盈亏','当日配对盈亏','未平仓成本','月度跨天释放','修正后总额'], top: 4, textStyle:{color:'#555', fontSize:11} },
         grid: { top: 44, left:'3%', right:'4%', bottom:'3%', containLabel:true },
         xAxis: { type:'category', data: months.map(m => m+'月'), axisLabel:{color:'#555'} },
         yAxis: { type:'value', name:'盈亏（元）', axisLabel:{formatter:'¥{value}'} },
         series: [
-            { name:'系统现有盈亏', type:'bar', data: monthSys, barGap:'10%', itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:9 } },
-            { name:'当日配对盈亏', type:'bar', data: monthPair, itemStyle:{ color:'#f2994a' }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#f2994a', fontSize:9 } },
-            { name:'月度跨天释放', type:'bar', data: monthCross, itemStyle:{ color:'#2f80ed' }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#2f80ed', fontSize:9 } },
-            { name:'修正后总额', type:'bar', data: monthCorrected, itemStyle:{ color:'#9b51e0' }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#9b51e0', fontSize:9 } }
+            { name:'系统现有盈亏', type:'bar', data: monthSys, barGap:'8%', itemStyle:{ color: p => profitColor(p.value) }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#333', fontSize:8 } },
+            { name:'当日配对盈亏', type:'bar', data: monthPair, itemStyle:{ color:'#f2994a' }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#f2994a', fontSize:8 } },
+            { name:'未平仓成本', type:'bar', data: monthUnmatch, itemStyle:{ color:'#95a5a6' }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#95a5a6', fontSize:8 } },
+            { name:'月度跨天释放', type:'bar', data: monthCross, itemStyle:{ color:'#2f80ed' }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#2f80ed', fontSize:8 } },
+            { name:'修正后总额', type:'bar', data: monthCorrected, itemStyle:{ color:'#9b51e0' }, label:{ show:true, position:'top', formatter: p => fmtMoney(p.value,true), color:'#9b51e0', fontSize:8 } }
         ]
     });
     mc.on('click', p => drillTo('month', p.name.replace('月','')));
