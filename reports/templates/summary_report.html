@@ -732,12 +732,14 @@ function renderOverview() {
     let cumulative = [], run = 0;
     dayProfits.forEach(p => { run += p; cumulative.push(Math.round(run*100)/100); });
     // 按证券代码分组（同一只票可能有OCR名称变体，按code合并避免跨天值重复累加）
+    // 同时拆分"已配对盈亏"/"未平仓成本"：盈亏比例含 ⚠️ 标记的为未平仓记录
     const stockByCode = {};
     recs.forEach(r => {
         const code = r.code;
-        if (!stockByCode[code]) stockByCode[code] = { code, name: r.name, nameCount: {}, sys: 0, count: 0 };
+        if (!stockByCode[code]) stockByCode[code] = { code, name: r.name, nameCount: {}, sys: 0, pair: 0, unmatch: 0, count: 0 };
         const g = stockByCode[code];
         g.sys += r.profit;
+        if ((r.profitPct || '').indexOf('⚠️') >= 0) { g.unmatch += r.profit; } else { g.pair += r.profit; }
         g.count += 1;
         g.nameCount[r.name] = (g.nameCount[r.name] || 0) + 1;
     });
@@ -748,8 +750,11 @@ function renderOverview() {
         let bestName = g.name, bestN = -1;
         Object.keys(g.nameCount).forEach(nm => { if (g.nameCount[nm] > bestN) { bestN = g.nameCount[nm]; bestName = nm; } });
         const sys = Math.round(g.sys*100)/100;
+        const pair = Math.round(g.pair*100)/100;
+        const unmatch = Math.round(g.unmatch*100)/100;
         const cross = (hasStockCross && STOCK_CROSS[code]) ? Math.round(STOCK_CROSS[code].cross*100)/100 : 0;
-        return { name: bestName, code, profit: sys, cross: cross, corrected: Math.round((sys + cross)*100)/100, count: g.count };
+        // 修正后口径与月度图一致：当日配对盈亏 + 跨天释放（不含未平仓成本）
+        return { name: bestName, code, profit: sys, pair: pair, unmatch: unmatch, cross: cross, corrected: Math.round((pair + cross)*100)/100, count: g.count };
     }).sort((a,b) => b.corrected - a.corrected);
     // “月度累计修正后收益曲线”：跨度>1个月（本年/全部/自定义）时显示，仿照累计收益曲线，横轴按月、数据为月度修正后总额逐月累加
     const showMonthlyCurve = months.length > 1;
@@ -759,8 +764,8 @@ function renderOverview() {
         <div class="chart-section"><h2 class="chart-title">📅 每日盈亏趋势 <span style="font-size:13px;color:#999;font-weight:normal">（点击柱体钻取日度明细）</span></h2><div id="chartDaily" class="chart-wrap"></div></div>
         <div class="chart-section"><h2 class="chart-title">💰 累计收益曲线</h2><div id="chartCumulative" class="chart-wrap"></div></div>
         ${showMonthlyCurve ? `<div class="chart-section"><h2 class="chart-title">📆 月度累计修正后收益曲线 <span style="font-size:13px;color:#999;font-weight:normal">（横轴按月，逐月累加“月度修正后总额”，数据口径与月度趋势五柱一致）</span></h2><div id="chartMonthlyCum" class="chart-wrap"></div></div>` : ''}
-        <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏排行 <span style="font-size:13px;color:#999;font-weight:normal">（三柱：系统现有 / 月度跨天释放 / 修正后总额；点击柱体查看个股明细）</span></h2><div id="chartStockBar" class="chart-wrap"></div></div>
-        <div class="chart-section"><h2 class="chart-title">🥧 盈亏构成分析 <span style="font-size:13px;color:#999;font-weight:normal">（修正后=系统现有+跨天释放，按个股真实盈亏分布）</span></h2><div id="chartStockPie" class="chart-wrap"></div></div>`;
+        <div class="chart-section"><h2 class="chart-title">🎯 各股票盈亏排行 <span style="font-size:13px;color:#999;font-weight:normal">（三柱：系统现有 / 月度跨天释放 / 修正后总额；<b>修正后=当日配对+跨天释放</b>，与月度图口径一致；点击柱体查看个股明细）</span></h2><div id="chartStockBar" class="chart-wrap"></div></div>
+        <div class="chart-section"><h2 class="chart-title">🥧 盈亏构成分析 <span style="font-size:13px;color:#999;font-weight:normal">（<b>修正后=当日配对+跨天释放</b>，与月度图口径一致；按个股修正后盈亏分布）</span></h2><div id="chartStockPie" class="chart-wrap"></div></div>`;
     document.getElementById('detailSection').innerHTML = '';
     const mc = mkChart('chartMonth');
     mc.setOption({
