@@ -50,6 +50,23 @@ os.makedirs(REPORTS_DIR, exist_ok=True)
 os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
+ECHARTS_LOCAL = os.path.join(REPORTS_DIR, 'echarts.min.js')  # 本地ECharts（内联用，避免CDN依赖导致白屏）
+
+def inline_echarts(html_content):
+    """把 <script src="echarts.min.js"></script> 内联成 <script>...</script>，
+    使报告变成单文件自包含，离线/预览面板/静态托管都不会因CDN或相对路径404而白屏。
+    找不到本地库时保留原样（页面仍有CDN兜底）。"""
+    tag = '<script src="echarts.min.js"></script>'
+    if tag not in html_content:
+        return html_content
+    if not os.path.exists(ECHARTS_LOCAL):
+        return html_content
+    with open(ECHARTS_LOCAL, 'r', encoding='utf-8') as f:
+        lib = f.read()
+    # 防止库内容里出现 </script> 提前闭合标签
+    lib = lib.replace('</script', '<\\/script')
+    return html_content.replace(tag, '<script>\n' + lib + '\n</script>')
+
 # 交易成本配置
 COMMISSION_RATE = 0.0001      # 佣金费率：万一（0.01%），双向征收
 MIN_COMMISSION = 5             # 最低佣金：5元/笔
@@ -1627,6 +1644,9 @@ def generate_summary_html():
     # 年度跨月配对数据（各月剩余SUM合并后跨月配对），用于年度跨天tab + 本年统计卡片
     yearly_cross = compute_yearly_cross()
     html_content = html_content.replace('{__YEARLY_CROSS__}', json.dumps(yearly_cross, ensure_ascii=False))
+
+    # 占位符全部替换完后，再把本地ECharts内联进HTML（单文件自包含，杜绝CDN/相对路径导致的白屏）
+    html_content = inline_echarts(html_content)
 
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)

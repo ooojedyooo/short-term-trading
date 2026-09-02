@@ -4,7 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>股票交易汇总分析</title>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="echarts.min.js"></script>
+    <script>
+    // 本地 ECharts 加载失败时（如单独拷贝了 html），回退到 CDN
+    if (typeof echarts === 'undefined') {
+        document.write('<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"><\/script>');
+    }
+    </script>
     <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body {

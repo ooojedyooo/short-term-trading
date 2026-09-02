@@ -15,6 +15,7 @@
 """
 import pandas as pd
 import json
+import os
 import argparse
 from datetime import date
 
@@ -22,6 +23,17 @@ PATH = '股票交易盈亏汇总.xlsx'
 COMMISSION_RATE = 0.0001  # 万一
 MIN_COMMISSION = 5.0
 STAMP_DUTY_RATE = 0.0005  # 万五，卖出单边
+ECHARTS_LOCAL = os.path.join('reports', 'echarts.min.js')
+
+
+def _inline_echarts(html):
+    """把本地ECharts库内联进HTML，做成单文件自包含，避免CDN/相对路径导致图表白屏。"""
+    tag = '<script src="echarts.min.js"></script>'
+    if tag not in html or not os.path.exists(ECHARTS_LOCAL):
+        return html
+    with open(ECHARTS_LOCAL, 'r', encoding='utf-8') as f:
+        lib = f.read().replace('</script', '<\\/script')
+    return html.replace(tag, '<script>\n' + lib + '\n</script>')
 
 
 def load():
@@ -270,7 +282,12 @@ def build_html(results, months, title, out_path, show_chart, mode_label):
         </div>
         '''
         chart_js = '''
-        <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+        <script src="echarts.min.js"></script>
+        <script>
+        if (typeof echarts === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"><\\/script>');
+        }
+        </script>
         <script>
         var chart = echarts.init(document.getElementById('chart'));
         var months = %s;
@@ -325,6 +342,8 @@ def build_html(results, months, title, out_path, show_chart, mode_label):
       {}
     </body></html>
     '''.format(title, title, overview, ''.join(blocks), chart_div, chart_js)
+
+    html = _inline_echarts(html)
 
     with open(out_path, 'w', encoding='utf-8') as f:
         f.write(html)
