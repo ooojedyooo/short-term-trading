@@ -137,6 +137,91 @@ def analyze(sub):
     }
 
 
+def analyze_year(df, year):
+    """年度跨月配对流水线（可复用）：
+    1) 每月先做当月跨天配对，取各月"仍完全未平仓"的剩余（带金额）
+    2) 把各月剩余汇总成跨月持有池，再做跨月合并配对
+    返回与 analyze() 同构的结果 dict，额外含 monthly_cross（月度跨天释放合计）。
+    """
+    ym_list = sorted(df['ym'].unique())
+    year_months = [m for m in ym_list if m.startswith(str(year))]
+    month_results = {m: analyze(df[df['ym'] == m]) for m in year_months}
+    monthly_cross_sum = sum(r['cross_net'] for r in month_results.values())
+
+    # 合并各月剩余（跨月持有池）
+    merged = {}
+    for m, r in month_results.items():
+        for rem in r['remain']:
+            d = merged.setdefault(rem['code'], {
+                'code': rem['code'], 'name': rem['name'],
+                'buy_q': 0, 'buy_amt': 0.0, 'sell_q': 0, 'sell_amt': 0.0})
+            d['buy_q'] += rem['remain_buy']
+            d['buy_amt'] += rem.get('remain_buy_amt', 0)
+            d['sell_q'] += rem['remain_sell']
+            d['sell_amt'] += rem.get('remain_sell_amt', 0)
+
+    # 跨月配对（流水线年度层）
+    cross_month = []
+    remain_final = []
+    cross_month_net = 0.0
+    for code, d in merged.items():
+        bq, bamt, sq, samt = d['buy_q'], d['buy_amt'], d['sell_q'], d['sell_amt']
+        if bq > 0 and sq > 0:
+            match = min(bq, sq)
+            m_bamt = bamt * (match / bq) if bq else 0
+            m_samt = samt * (match / sq) if sq else 0
+            gross = m_samt - m_bamt
+            comm = max(m_bamt * COMMISSION_RATE, MIN_COMMISSION) + \
+                   max(m_samt * COMMISSION_RATE, MIN_COMMISSION)
+            stamp = m_samt * STAMP_DUTY_RATE
+            cost = comm + stamp
+            net = gross - cost
+            cross_month_net += net
+            rbuy = bq - match
+            rsell = sq - match
+            cross_month.append({
+                'code': code, 'name': d['name'],
+                'buy_q': int(bq), 'buy_amt': round(bamt, 2), 'buy_avg': round(bamt / bq, 3),
+                'sell_q': int(sq), 'sell_amt': round(samt, 2), 'sell_avg': round(samt / sq, 3),
+                'match': int(match), 'gross': round(gross, 2),
+                'cost': round(cost, 2), 'net': round(net, 2),
+            })
+            if rbuy > 0 or rsell > 0:
+                rba = round(bamt - m_bamt, 2) if rbuy > 0 else 0
+                rsa = round(samt - m_samt, 2) if rsell > 0 else 0
+                remain_final.append({
+                    'code': code, 'name': d['name'],
+                    'remain_buy': int(rbuy), 'remain_sell': int(rsell),
+                    'remain_buy_amt': rba, 'remain_sell_amt': rsa,
+                    'note': ('仍买入未平仓 {}股'.format(int(rbuy)) if rbuy > 0 else '') +
+                            ('；仍卖出未平仓 {}股'.format(int(rsell)) if rsell > 0 else ''),
+                })
+        else:
+            remain_final.append({
+                'code': code, 'name': d['name'],
+                'remain_buy': int(bq), 'remain_sell': int(sq),
+                'remain_buy_amt': round(bamt, 2), 'remain_sell_amt': round(samt, 2),
+                'note': ('仅买入未平仓 {}股（跨年持有底仓）'.format(int(bq)) if bq > 0
+                         else '仅卖出未平仓 {}股（平旧仓，无对应买入）'.format(int(sq))),
+            })
+
+    sub_all = df[df['ym'].str.startswith(str(year))]
+    sys_total = sub_all['盈亏金额'].sum()
+    pair_pnl = sub_all[sub_all['type'] == 'pair']['盈亏金额'].sum()
+    corrected = pair_pnl + monthly_cross_sum + cross_month_net
+
+    return {
+        'sys_total': round(sys_total, 2),
+        'pair_pnl': round(pair_pnl, 2),
+        'unmatched_cost': 0,
+        'cross_net': round(cross_month_net, 2),
+        'monthly_cross': round(monthly_cross_sum, 2),
+        'corrected': round(corrected, 2),
+        'cross': cross_month,
+        'remain': remain_final,
+    }
+
+
 def export_remain(remain, path):
     rows = [{
         '证券代码': r['code'], '证券名称': r['name'],
@@ -155,7 +240,7 @@ def color_pnl(x):
     return '#d4380d' if x >= 0 else '#16a34a'  # 红涨绿跌
 
 
-def build_html(results, months, title, out_path, show_chart, mode_label):
+def build_html(results, months, title, out_path, show_chart, mode_label, hist_html=''):
     tot_sys = tot_corrected = tot_cross = 0.0
     tot_remain = 0
     chart_months, chart_sys, chart_corr = [], [], []
@@ -340,8 +425,14 @@ def build_html(results, months, title, out_path, show_chart, mode_label):
       {}
       {}
       {}
+      {}
     </body></html>
-    '''.format(title, title, overview, ''.join(blocks), chart_div, chart_js)
+    '''.format(title, title, overview, hist_html, ''.join(blocks), chart_div, chart_js)
+
+    # 月/年模式下没有 chart_js，需补上 ECharts 库引用，否则历史轨迹图会白屏
+    ECHARTS_TAG = '<script src="echarts.min.js"></script>'
+    if hist_html and ECHARTS_TAG not in html:
+        html = html.replace('<body>', '<body>\n    ' + ECHARTS_TAG, 1)
 
     html = _inline_echarts(html)
 
@@ -399,82 +490,8 @@ def main():
 
     # 计算
     if mode == 'year':
-        # 忠实流水线：每月先配对取剩余（带金额），再把各月剩余跨月合并配对
-        year_months = [m for m in all_months if m.startswith(str(year))]
-        month_results = {m: analyze(df[df['ym'] == m]) for m in year_months}
-        monthly_cross_sum = sum(r['cross_net'] for r in month_results.values())
-
-        # 合并各月剩余（跨月持有池）
-        merged = {}
-        for m, r in month_results.items():
-            for rem in r['remain']:
-                d = merged.setdefault(rem['code'], {
-                    'code': rem['code'], 'name': rem['name'],
-                    'buy_q': 0, 'buy_amt': 0.0, 'sell_q': 0, 'sell_amt': 0.0})
-                d['buy_q'] += rem['remain_buy']
-                d['buy_amt'] += rem.get('remain_buy_amt', 0)
-                d['sell_q'] += rem['remain_sell']
-                d['sell_amt'] += rem.get('remain_sell_amt', 0)
-
-        # 跨月配对（流水线年度层）
-        cross_month = []
-        remain_final = []
-        cross_month_net = 0.0
-        for code, d in merged.items():
-            bq, bamt, sq, samt = d['buy_q'], d['buy_amt'], d['sell_q'], d['sell_amt']
-            if bq > 0 and sq > 0:
-                match = min(bq, sq)
-                bavg = bamt / bq
-                savg = samt / sq
-                m_bamt = bamt * (match / bq)
-                m_samt = samt * (match / sq)
-                gross = m_samt - m_bamt
-                comm = max(m_bamt * COMMISSION_RATE, MIN_COMMISSION) + \
-                       max(m_samt * COMMISSION_RATE, MIN_COMMISSION)
-                stamp = m_samt * STAMP_DUTY_RATE
-                cost = comm + stamp
-                net = gross - cost
-                cross_month_net += net
-                rbuy = bq - match
-                rsell = sq - match
-                cross_month.append({
-                    'code': code, 'name': d['name'],
-                    'buy_q': int(bq), 'buy_amt': round(bamt, 2), 'buy_avg': round(bavg, 3),
-                    'sell_q': int(sq), 'sell_amt': round(samt, 2), 'sell_avg': round(savg, 3),
-                    'match': int(match), 'gross': round(gross, 2),
-                    'cost': round(cost, 2), 'net': round(net, 2),
-                })
-                if rbuy > 0 or rsell > 0:
-                    remain_final.append({
-                        'code': code, 'name': d['name'],
-                        'remain_buy': int(rbuy), 'remain_sell': int(rsell),
-                        'note': ('仍买入未平仓 {}股'.format(int(rbuy)) if rbuy > 0 else '') +
-                                ('；仍卖出未平仓 {}股'.format(int(rsell)) if rsell > 0 else ''),
-                    })
-            else:
-                remain_final.append({
-                    'code': code, 'name': d['name'],
-                    'remain_buy': int(bq), 'remain_sell': int(sq),
-                    'note': ('仅买入未平仓 {}股（跨年持有底仓）'.format(int(bq)) if bq > 0
-                             else '仅卖出未平仓 {}股（平旧仓，无对应买入）'.format(int(sq))),
-                })
-
-        # 全年系统现有口径
-        sub_all = df[df['ym'].str.startswith(str(year))]
-        sys_total = sub_all['盈亏金额'].sum()
-        pair_pnl = sub_all[sub_all['type'] == 'pair']['盈亏金额'].sum()
-        corrected = pair_pnl + monthly_cross_sum + cross_month_net
-
-        results = {str(year): {
-            'sys_total': round(sys_total, 2),
-            'pair_pnl': round(pair_pnl, 2),
-            'unmatched_cost': 0,
-            'cross_net': round(cross_month_net, 2),
-            'monthly_cross': round(monthly_cross_sum, 2),
-            'corrected': round(corrected, 2),
-            'cross': cross_month,
-            'remain': remain_final,
-        }}
+        yr = analyze_year(df, year)
+        results = {str(year): yr}
         months = [str(year)]
         title = '{} 年度跨天配对分析（月度剩余跨月进一步匹配）'.format(year)
         out = 'reports/年度跨天配对分析_{}.html'.format(year)
@@ -494,7 +511,29 @@ def main():
     show_chart = (mode == 'all')
     mode_label = {'month': '月度', 'year': '年度', 'all': '月度'}[mode]
 
-    build_html(results, months, title, out, show_chart, mode_label)
+    # ---------- 历史快照：本次结果入档 + 取回历史序列画趋势图 ----------
+    hist_html = ''
+    try:
+        from 跨天历史 import (rec_month, rec_year, upsert,
+                              load_snap, history_chart_html, build_trend_report)
+        if mode == 'year':
+            last_day = str(df[df['ym'].str.startswith(str(year))]['日期'].astype(str).str[:10].max())
+            upsert('yearly', str(year), rec_year(last_day, results[str(year)]))
+            recs = load_snap()['yearly'].get(str(year), [])
+            hist_html = history_chart_html('year', recs)
+            print('[快照] 年度 {} @ {} 已入档，历史 {} 点'.format(year, last_day, len(recs)))
+        elif mode == 'month':
+            last_day = str(df[df['ym'] == mtag]['日期'].astype(str).str[:10].max())
+            upsert('monthly', mtag, rec_month(last_day, results[mtag]))
+            recs = load_snap()['monthly'].get(mtag, [])
+            hist_html = history_chart_html('month', recs)
+            print('[快照] 月度 {} @ {} 已入档，历史 {} 点'.format(mtag, last_day, len(recs)))
+        if mode in ('year', 'month'):
+            print('[快照] 历史趋势报告已刷新：', build_trend_report(load_snap()))
+    except Exception as e:
+        print('[快照] 跳过（不影响本次分析）：', e)
+
+    build_html(results, months, title, out, show_chart, mode_label, hist_html)
     print('=' * 70)
     print(title)
     print('=' * 70)
