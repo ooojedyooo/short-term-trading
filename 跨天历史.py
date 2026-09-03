@@ -279,7 +279,16 @@ def history_chart_html(kind, recs, prefix='h'):
     return _chart_block(prefix + 'c', title, dates, series, height=380)
 
 
-def build_trend_report(data):
+def trend_content(data, css_scoped=False):
+    """生成完整趋势内容片段，供独立趋势页与「年度跨天」页共用。
+
+    返回 dict：
+      overview  - 概况区块（卡片 + 口径说明），已用 .block 包裹
+      years     - 年度曲线 + 日环比柱
+      months    - 月度曲线
+      table     - 年度快照明细表
+      subtitle  - 一行统计说明
+    """
     yearly = data['yearly']
     monthly = data['monthly']
 
@@ -372,6 +381,31 @@ def build_trend_report(data):
         sum(len(v) for v in yearly.values()),
         sum(len(v) for v in monthly.values()), total_pts)
 
+    overview = '''
+    <div class="block">
+      <h2>历史趋势概况</h2>
+      <div class="cards">%s</div>
+      <p class="hint">
+        <b>口径说明：</b>系统现有 = 当日配对 + 未平仓成本；修正后 = 月度跨天释放 + 年度跨月释放 + 当日配对。<br>
+        <b>怎么看：</b>「修正后真实」曲线是累计值，随每天跑批更新；「日环比增量」柱子是当天新产生的变化量，
+        柱子为正说明当天跨天配对释放了盈利（或减少了浮亏计提）。最大回撤 = 修正后曲线从历史峰值到谷底的最大跌幅。<br>
+        <b>红涨绿跌。</b>快照按数据日期去重，同一天重复跑批会覆盖旧值。
+      </p>
+    </div>
+    ''' % (overview_cards or '<div class="empty">暂无年度快照，先跑 --backfill</div>')
+
+    return {
+        'overview': overview,
+        'years': year_blocks,
+        'months': month_blocks,
+        'table': table_html,
+        'subtitle': subtitle,
+        'js': JS_FMT,
+    }
+
+
+def build_trend_report(data):
+    c = trend_content(data)
     html = '''
 <!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
@@ -398,22 +432,13 @@ def build_trend_report(data):
   <script>%s</script>
   <h1>跨天配对历史趋势</h1>
   <div class="sub">%s · 生成于 %s</div>
-  <div class="overview">
-    <div class="cards">%s</div>
-    <p class="hint">
-      <b>口径说明：</b>系统现有 = 当日配对 + 未平仓成本；修正后 = 月度跨天释放 + 年度跨月释放 + 当日配对。<br>
-      <b>怎么看：</b>「修正后真实」曲线是累计值，随每天跑批更新；「日环比增量」柱子是当天新产生的变化量，
-      柱子为正说明当天跨天配对释放了盈利（或减少了浮亏计提）。最大回撤 = 修正后曲线从历史峰值到谷底的最大跌幅。<br>
-      <b>红涨绿跌。</b>快照按数据日期去重，同一天重复跑批会覆盖旧值。
-    </p>
-  </div>
+  %s
   %s
   %s
   %s
 </body></html>
-''' % (JS_FMT, subtitle, date.today().isoformat(),
-       overview_cards or '<div class="empty">暂无年度快照，先跑 --backfill</div>',
-       year_blocks, month_blocks, table_html)
+''' % (c['js'], c['subtitle'], date.today().isoformat(),
+       c['overview'], c['years'], c['months'], c['table'])
 
     html = _inline_echarts(html)
     os.makedirs('reports', exist_ok=True)

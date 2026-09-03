@@ -89,16 +89,38 @@ var Vr={},Br={};var Fr=function(){function t(t,e,n){var i=this;this._sleepAfterS
       剩余未匹配持仓已导出为 Excel 文件（见同目录 剩余持仓_*.xlsx）。</p>
     </div>
     
-      
+      <script>
+function fmtV(v){ if(v===null||v===undefined) return '-';
+  var s=(v>=0?'+':'')+v.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return s; }
+function fmtAbs(v){ if(v===null||v===undefined) return '-';
+  return v.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+</script>
     <div class="block">
-      <h2>历史轨迹 · 年度口径随交易日的变化（82 个快照点）</h2>
-      <div id="hc" style="width:100%;height:380px;"></div>
+      <h2>历史趋势概况</h2>
+      <div class="cards">
+        <div class="card"><div class="t">2026 年 · 快照点数</div><div class="v">82 个交易日</div></div>
+        <div class="card"><div class="t">2026 年 · 最新修正后</div><div class="v" style="color:#d4380d">163,834.88</div></div>
+        <div class="card"><div class="t">2026 年 · 区间变化</div><div class="v" style="color:#d4380d">+161,663.68</div></div>
+        <div class="card"><div class="t">2026 年 · 最大回撤</div><div class="v" style="color:#16a34a">-115,392.63</div></div>
+        </div>
+      <p class="hint">
+        <b>口径说明：</b>系统现有 = 当日配对 + 未平仓成本；修正后 = 月度跨天释放 + 年度跨月释放 + 当日配对。<br>
+        <b>怎么看：</b>「修正后真实」曲线是累计值，随每天跑批更新；「日环比增量」柱子是当天新产生的变化量，
+        柱子为正说明当天跨天配对释放了盈利（或减少了浮亏计提）。最大回撤 = 修正后曲线从历史峰值到谷底的最大跌幅。<br>
+        <b>红涨绿跌。</b>快照按数据日期去重，同一天重复跑批会覆盖旧值。
+      </p>
+    </div>
+    
+    <div class="block">
+      <h2>2026 年度口径变化轨迹</h2>
+      <div id="yc_2026" style="width:100%;height:430px;"></div>
     </div>
     <script>
     (function(){
       function fmtV(v){ if(v===null||v===undefined) return '-';
         return (v>=0?'+':'')+v.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-      var c = echarts.init(document.getElementById('hc'));
+      var c = echarts.init(document.getElementById('yc_2026'));
       c.setOption({
         tooltip:{trigger:'axis',axisPointer:{type:'cross'},
           valueFormatter:function(v){return fmtV(v);}},
@@ -113,6 +135,176 @@ var Vr={},Br={};var Fr=function(){function t(t,e,n){var i=this;this._sleepAfterS
     })();
     </script>
     
+    <div class="block">
+      <h2>2026 年 · 修正后盈亏日环比增量</h2>
+      <div id="yd_2026" style="width:100%;height:320px;"></div>
+    </div>
+    <script>
+    (function(){
+      function fmtV(v){ if(v===null||v===undefined) return '-';
+        return (v>=0?'+':'')+v.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+      var c = echarts.init(document.getElementById('yd_2026'));
+      var vals = [null, 657.34, 421.57, 1536.54, -608.79, 2050.4, 5591.76, 196.59, 2438.43, 805.19, 1092.32, 784.22, 1186.07, 1196.97, 1879.65, 3714.65, 1427.48, 4331.27, 5309.89, 1458.95, 5547.93, 8131.57, 5611.71, 7254.88, 7877.94, 24824.9, -6286.54, 4161.51, 3111.33, 1122.01, 2745.54, 2308.26, -18212.13, 727.27, 11661.08, -6616.25, 371.96, 4514.57, 19943.67, -3897.4, 6601.0, 212.34, 15190.02, -2117.75, -3641.73, 8999.33, 5577.99, 2951.46, 26833.49, -5280.01, 1297.37, 8999.4, 2481.35, 1609.98, 7771.87, 4764.52, 4438.83, 4977.47, 13244.08, 1257.65, -568.14, -36410.65, 8301.86, 24106.98, 1814.86, -26046.42, -52055.78, -34535.34, 5869.67, 1641.86, 194.5, 3288.36, -3133.75, 6291.69, -4019.86, 17186.4, -6275.17, 11446.66, 4343.93, 19111.75, 2966.69, 1600.61];
+      c.setOption({
+        tooltip:{trigger:'axis',valueFormatter:function(v){return fmtV(v);}},
+        grid:{left:80,right:30,bottom:60,top:20},
+        xAxis:{type:'category',data:["2026-04-10", "2026-04-14", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-28", "2026-07-31", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-26", "2026-08-27", "2026-08-28", "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03"],axisLabel:{rotate:45}},
+        yAxis:{type:'value',name:'元',axisLabel:{formatter:function(v){return v.toLocaleString('zh-CN');}}},
+        dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:12}],
+        series:[{name:'日环比',type:'bar',data:vals,
+          itemStyle:{color:function(p){return p.value>=0?'#d4380d':'#16a34a';}}}]
+      });
+      window.addEventListener('resize',function(){c.resize();});
+    })();
+    </script>
+    
+    <div class="block">
+      <h2>2026-04 月度口径变化轨迹</h2>
+      <div id="mc_202604" style="width:100%;height:340px;"></div>
+    </div>
+    <script>
+    (function(){
+      function fmtV(v){ if(v===null||v===undefined) return '-';
+        return (v>=0?'+':'')+v.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+      var c = echarts.init(document.getElementById('mc_202604'));
+      c.setOption({
+        tooltip:{trigger:'axis',axisPointer:{type:'cross'},
+          valueFormatter:function(v){return fmtV(v);}},
+        legend:{data:['系统现有','当月跨天释放','修正后真实'],top:0},
+        grid:{left:80,right:30,bottom:60,top:40},
+        xAxis:{type:'category',data:["2026-04-10", "2026-04-14", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30"],axisLabel:{rotate:45}},
+        yAxis:{type:'value',name:'元',axisLabel:{formatter:function(v){return v.toLocaleString('zh-CN');}}},
+        dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:12}],
+        series:[{name:'系统现有',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#8c8c8c'},areaStyle:null,data:[2171.2, 2828.54, 3250.11, 4786.65, 4177.86, 6228.26, 11820.02, 12016.61, 14455.04, 15260.23, 16352.55, 17136.77, 18322.84]},{name:'当月跨天释放',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#f2994a'},areaStyle:null,data:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]},{name:'修正后真实',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#d4380d'},areaStyle:{color:'#d4380d',opacity:0.08},data:[2171.2, 2828.54, 3250.11, 4786.65, 4177.86, 6228.26, 11820.02, 12016.61, 14455.04, 15260.23, 16352.55, 17136.77, 18322.84]}]
+      });
+      window.addEventListener('resize',function(){c.resize();});
+    })();
+    </script>
+    
+    <div class="block">
+      <h2>2026-05 月度口径变化轨迹</h2>
+      <div id="mc_202605" style="width:100%;height:340px;"></div>
+    </div>
+    <script>
+    (function(){
+      function fmtV(v){ if(v===null||v===undefined) return '-';
+        return (v>=0?'+':'')+v.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+      var c = echarts.init(document.getElementById('mc_202605'));
+      c.setOption({
+        tooltip:{trigger:'axis',axisPointer:{type:'cross'},
+          valueFormatter:function(v){return fmtV(v);}},
+        legend:{data:['系统现有','当月跨天释放','修正后真实'],top:0},
+        grid:{left:80,right:30,bottom:60,top:40},
+        xAxis:{type:'category',data:["2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28"],axisLabel:{rotate:45}},
+        yAxis:{type:'value',name:'元',axisLabel:{formatter:function(v){return v.toLocaleString('zh-CN');}}},
+        dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:12}],
+        series:[{name:'系统现有',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#8c8c8c'},areaStyle:null,data:[1196.97, 3076.62, 6791.27, 8114.8, 10871.58, 14576.98, 17337.58, 22121.6, 22571.91, 23745.65, 26062.08, 32797.65, 35112.05, 37002.04, 42317.64, 46334.52, 48750.7]},{name:'当月跨天释放',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#f2994a'},areaStyle:null,data:[0.0, 0.0, 0.0, 0.0, 1521.67, 2904.98, 1591.45, 2300.88, 9958.8, 14310.45, 19194.25, 20287.97, 42543.31, 34295.11, 33121.02, 32208.91, 30885.53]},{name:'修正后真实',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#d4380d'},areaStyle:{color:'#d4380d',opacity:0.08},data:[1196.97, 3076.62, 6791.27, 8218.75, 12550.02, 17859.91, 19318.86, 24866.79, 32998.36, 38610.07, 45864.95, 53742.89, 78567.79, 72281.25, 76442.76, 79554.09, 80676.1]}]
+      });
+      window.addEventListener('resize',function(){c.resize();});
+    })();
+    </script>
+    
+    <div class="block">
+      <h2>2026-06 月度口径变化轨迹</h2>
+      <div id="mc_202606" style="width:100%;height:340px;"></div>
+    </div>
+    <script>
+    (function(){
+      function fmtV(v){ if(v===null||v===undefined) return '-';
+        return (v>=0?'+':'')+v.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+      var c = echarts.init(document.getElementById('mc_202606'));
+      c.setOption({
+        tooltip:{trigger:'axis',axisPointer:{type:'cross'},
+          valueFormatter:function(v){return fmtV(v);}},
+        legend:{data:['系统现有','当月跨天释放','修正后真实'],top:0},
+        grid:{left:80,right:30,bottom:60,top:40},
+        xAxis:{type:'category',data:["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30"],axisLabel:{rotate:45}},
+        yAxis:{type:'value',name:'元',axisLabel:{formatter:function(v){return v.toLocaleString('zh-CN');}}},
+        dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:12}],
+        series:[{name:'系统现有',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#8c8c8c'},areaStyle:null,data:[2745.54, 3295.43, 5766.03, 6488.3, 6923.34, 8150.29, 8512.85, 9381.98, 13846.6, 14975.74, 18133.94, 20401.53, 22905.79, 25444.11, 25631.49, 28728.68, 32488.46, 31326.94, 33330.3, 33808.37]},{name:'当月跨天释放',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#f2994a'},areaStyle:null,data:[0.0, 0.0, 0.0, 0.0, 4091.93, 2852.85, 2852.85, -4325.08, 13815.11, 6792.24, 15330.49, 10712.26, 22612.11, 24763.28, 20900.12, 26750.42, 23752.28, 27846.64, 55772.84, 49899.09]},{name:'修正后真实',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#d4380d'},areaStyle:{color:'#d4380d',opacity:0.08},data:[2745.54, 3353.68, 5891.26, 6618.53, 11168.59, 11344.13, 11716.09, 5475.46, 28175.51, 22450.93, 34152.38, 31931.87, 46534.35, 51328.57, 47686.84, 56686.17, 57583.57, 60535.03, 90591.86, 85311.85]}]
+      });
+      window.addEventListener('resize',function(){c.resize();});
+    })();
+    </script>
+    
+    <div class="block">
+      <h2>2026-07 月度口径变化轨迹</h2>
+      <div id="mc_202607" style="width:100%;height:340px;"></div>
+    </div>
+    <script>
+    (function(){
+      function fmtV(v){ if(v===null||v===undefined) return '-';
+        return (v>=0?'+':'')+v.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+      var c = echarts.init(document.getElementById('mc_202607'));
+      c.setOption({
+        tooltip:{trigger:'axis',axisPointer:{type:'cross'},
+          valueFormatter:function(v){return fmtV(v);}},
+        legend:{data:['系统现有','当月跨天释放','修正后真实'],top:0},
+        grid:{left:80,right:30,bottom:60,top:40},
+        xAxis:{type:'category',data:["2026-07-01", "2026-07-02", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-28", "2026-07-31"],axisLabel:{rotate:45}},
+        yAxis:{type:'value',name:'元',axisLabel:{formatter:function(v){return v.toLocaleString('zh-CN');}}},
+        dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:12}],
+        series:[{name:'系统现有',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#8c8c8c'},areaStyle:null,data:[5079.55, 12586.97, 15793.62, 17403.6, 22815.06, 26112.23, 28539.75, 33065.44, 34214.27, 35754.44, 38615.2, 41503.56, 42176.24, 43683.45, 43646.88, 45087.67]},{name:'当月跨天释放',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#f2994a'},areaStyle:null,data:[0.0, 0.0, -912.67, -912.67, 798.98, -702.12, -3170.39, 2673.05, 9423.01, 9423.01, 2987.15, -26738.06, -22873.19, -19348.34, -19348.34, -38913.84]},{name:'修正后真实',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#d4380d'},areaStyle:{color:'#d4380d',opacity:0.08},data:[5096.52, 12633.07, 14973.17, 16583.15, 23790.04, 25729.63, 25815.35, 36312.14, 44300.06, 45863.64, 42348.74, 15704.76, 20254.38, 25296.46, 25296.46, 7231.84]}]
+      });
+      window.addEventListener('resize',function(){c.resize();});
+    })();
+    </script>
+    
+    <div class="block">
+      <h2>2026-08 月度口径变化轨迹</h2>
+      <div id="mc_202608" style="width:100%;height:340px;"></div>
+    </div>
+    <script>
+    (function(){
+      function fmtV(v){ if(v===null||v===undefined) return '-';
+        return (v>=0?'+':'')+v.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+      var c = echarts.init(document.getElementById('mc_202608'));
+      c.setOption({
+        tooltip:{trigger:'axis',axisPointer:{type:'cross'},
+          valueFormatter:function(v){return fmtV(v);}},
+        legend:{data:['系统现有','当月跨天释放','修正后真实'],top:0},
+        grid:{left:80,right:30,bottom:60,top:40},
+        xAxis:{type:'category',data:["2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-26", "2026-08-27", "2026-08-28", "2026-08-31"],axisLabel:{rotate:45}},
+        yAxis:{type:'value',name:'元',axisLabel:{formatter:function(v){return v.toLocaleString('zh-CN');}}},
+        dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:12}],
+        series:[{name:'系统现有',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#8c8c8c'},areaStyle:null,data:[-167.3, -920.69, -1162.23, -424.0, -239.5, 140.32, 286.13, 1579.45, 1955.89, 2234.21, 2903.45, 2854.21, 3966.78]},{name:'当月跨天释放',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#f2994a'},areaStyle:null,data:[0.0, 0.0, 0.0, 2065.97, 2065.97, -2048.25, -914.1, -2687.45, -2496.94, 1183.29, 1210.12, -1600.58, -155.78]},{name:'修正后真实',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#d4380d'},areaStyle:{color:'#d4380d',opacity:0.08},data:[0.0, -601.74, -830.67, 2103.02, 2297.52, -1406.07, -55.22, -520.25, 67.19, 4089.14, 4823.33, 2012.63, 4585.0]}]
+      });
+      window.addEventListener('resize',function(){c.resize();});
+    })();
+    </script>
+    
+    <div class="block">
+      <h2>2026-09 月度口径变化轨迹</h2>
+      <div id="mc_202609" style="width:100%;height:340px;"></div>
+    </div>
+    <script>
+    (function(){
+      function fmtV(v){ if(v===null||v===undefined) return '-';
+        return (v>=0?'+':'')+v.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+      var c = echarts.init(document.getElementById('mc_202609'));
+      c.setOption({
+        tooltip:{trigger:'axis',axisPointer:{type:'cross'},
+          valueFormatter:function(v){return fmtV(v);}},
+        legend:{data:['系统现有','当月跨天释放','修正后真实'],top:0},
+        grid:{left:80,right:30,bottom:60,top:40},
+        xAxis:{type:'category',data:["2026-09-01", "2026-09-02", "2026-09-03"],axisLabel:{rotate:45}},
+        yAxis:{type:'value',name:'元',axisLabel:{formatter:function(v){return v.toLocaleString('zh-CN');}}},
+        dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:12}],
+        series:[{name:'系统现有',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#8c8c8c'},areaStyle:null,data:[-49.52, -74.52, 292.66]},{name:'当月跨天释放',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#f2994a'},areaStyle:null,data:[0.0, 0.0, 0.0]},{name:'修正后真实',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#d4380d'},areaStyle:{color:'#d4380d',opacity:0.08},data:[0.0, 0.0, 403.78]}]
+      });
+      window.addEventListener('resize',function(){c.resize();});
+    })();
+    </script>
+    
+        <div class="block">
+          <h2>年度快照明细（最近 30 个交易日）</h2>
+          <table>
+            <thead><tr><th>数据日期</th><th>系统现有</th><th>月度跨天</th><th>年度跨月</th>
+            <th>修正后</th><th>日环比</th><th>跨期仍持有</th></tr></thead>
+            <tbody><tr><td>2026-07-06</td><td>116,675.53</td><td>+79,871.95</td><td>-18,634.19</td><td style="color:#d4380d;font-weight:700">180,649.77</td><td style="color:#8c8c8c">-</td><td>31</td></tr><tr><td>2026-07-07</td><td>118,285.51</td><td>+79,871.95</td><td>-18,634.19</td><td style="color:#d4380d;font-weight:700">182,259.75</td><td style="color:#d4380d">+4,091.33</td><td>31</td></tr><tr><td>2026-07-08</td><td>123,696.97</td><td>+81,583.60</td><td>-18,069.21</td><td style="color:#d4380d;font-weight:700">190,031.62</td><td style="color:#d4380d">+9,381.85</td><td>31</td></tr><tr><td>2026-07-09</td><td>126,994.14</td><td>+80,082.50</td><td>-15,244.28</td><td style="color:#d4380d;font-weight:700">194,796.14</td><td style="color:#d4380d">+12,536.39</td><td>30</td></tr><tr><td>2026-07-14</td><td>129,421.66</td><td>+77,614.23</td><td>-10,891.17</td><td style="color:#d4380d;font-weight:700">199,234.97</td><td style="color:#d4380d">+9,203.35</td><td>30</td></tr><tr><td>2026-07-15</td><td>133,947.35</td><td>+83,457.67</td><td>-16,410.49</td><td style="color:#d4380d;font-weight:700">204,212.44</td><td style="color:#d4380d">+9,416.30</td><td>32</td></tr><tr><td>2026-07-16</td><td>135,096.18</td><td>+90,207.63</td><td>-11,154.33</td><td style="color:#d4380d;font-weight:700">217,456.52</td><td style="color:#d4380d">+18,221.55</td><td>31</td></tr><tr><td>2026-07-17</td><td>136,636.35</td><td>+90,207.63</td><td>-11,460.26</td><td style="color:#d4380d;font-weight:700">218,714.17</td><td style="color:#d4380d">+14,501.73</td><td>31</td></tr><tr><td>2026-07-20</td><td>139,497.11</td><td>+83,771.77</td><td>-8,513.50</td><td style="color:#d4380d;font-weight:700">218,146.03</td><td style="color:#d4380d">+689.51</td><td>32</td></tr><tr><td>2026-07-21</td><td>142,385.47</td><td>+54,046.56</td><td>-18,280.17</td><td style="color:#d4380d;font-weight:700">181,735.38</td><td style="color:#16a34a">-36,978.79</td><td>32</td></tr><tr><td>2026-07-22</td><td>143,058.15</td><td>+57,911.43</td><td>-14,527.93</td><td style="color:#d4380d;font-weight:700">190,037.24</td><td style="color:#16a34a">-28,108.79</td><td>32</td></tr><tr><td>2026-07-23</td><td>144,565.36</td><td>+61,436.28</td><td>+4,536.97</td><td style="color:#d4380d;font-weight:700">214,144.22</td><td style="color:#d4380d">+32,408.84</td><td>32</td></tr><tr><td>2026-07-28</td><td>144,528.79</td><td>+61,436.28</td><td>+6,351.83</td><td style="color:#d4380d;font-weight:700">215,959.08</td><td style="color:#d4380d">+25,921.84</td><td>33</td></tr><tr><td>2026-07-31</td><td>145,969.58</td><td>+41,870.78</td><td>-1,629.97</td><td style="color:#d4380d;font-weight:700">189,912.66</td><td style="color:#16a34a">-24,231.56</td><td>33</td></tr><tr><td>2026-08-04</td><td>145,802.28</td><td>+41,870.78</td><td>-53,685.75</td><td style="color:#d4380d;font-weight:700">137,856.88</td><td style="color:#16a34a">-78,102.20</td><td>32</td></tr><tr><td>2026-08-05</td><td>145,048.89</td><td>+41,870.78</td><td>-87,619.35</td><td style="color:#d4380d;font-weight:700">103,321.54</td><td style="color:#16a34a">-86,591.12</td><td>33</td></tr><tr><td>2026-08-06</td><td>144,807.35</td><td>+41,870.78</td><td>-81,520.75</td><td style="color:#d4380d;font-weight:700">109,191.21</td><td style="color:#16a34a">-28,665.67</td><td>33</td></tr><tr><td>2026-08-07</td><td>145,545.58</td><td>+43,936.75</td><td>-82,812.58</td><td style="color:#d4380d;font-weight:700">110,833.07</td><td style="color:#d4380d">+7,511.53</td><td>33</td></tr><tr><td>2026-08-10</td><td>145,730.08</td><td>+43,936.75</td><td>-82,812.58</td><td style="color:#d4380d;font-weight:700">111,027.57</td><td style="color:#d4380d">+1,836.36</td><td>35</td></tr><tr><td>2026-08-11</td><td>146,109.90</td><td>+39,822.53</td><td>-75,820.63</td><td style="color:#d4380d;font-weight:700">114,315.93</td><td style="color:#d4380d">+3,482.86</td><td>35</td></tr><tr><td>2026-08-12</td><td>146,255.71</td><td>+40,956.68</td><td>-80,305.23</td><td style="color:#d4380d;font-weight:700">111,182.18</td><td style="color:#d4380d">+154.61</td><td>35</td></tr><tr><td>2026-08-13</td><td>147,549.03</td><td>+39,183.33</td><td>-73,548.51</td><td style="color:#d4380d;font-weight:700">117,473.87</td><td style="color:#d4380d">+3,157.94</td><td>35</td></tr><tr><td>2026-08-14</td><td>147,925.47</td><td>+39,373.84</td><td>-78,155.81</td><td style="color:#d4380d;font-weight:700">113,454.01</td><td style="color:#d4380d">+2,271.83</td><td>35</td></tr><tr><td>2026-08-26</td><td>148,203.79</td><td>+43,054.07</td><td>-64,991.36</td><td style="color:#d4380d;font-weight:700">130,640.41</td><td style="color:#d4380d">+13,166.54</td><td>35</td></tr><tr><td>2026-08-27</td><td>148,873.03</td><td>+43,080.90</td><td>-72,000.72</td><td style="color:#d4380d;font-weight:700">124,365.24</td><td style="color:#d4380d">+10,911.23</td><td>35</td></tr><tr><td>2026-08-28</td><td>148,823.79</td><td>+40,270.20</td><td>-57,743.36</td><td style="color:#d4380d;font-weight:700">135,811.90</td><td style="color:#d4380d">+5,171.49</td><td>35</td></tr><tr><td>2026-08-31</td><td>149,936.36</td><td>+41,715.00</td><td>-55,971.80</td><td style="color:#d4380d;font-weight:700">140,155.83</td><td style="color:#d4380d">+15,790.59</td><td>35</td></tr><tr><td>2026-09-01</td><td>149,886.84</td><td>+41,715.00</td><td>-36,860.05</td><td style="color:#d4380d;font-weight:700">159,267.58</td><td style="color:#d4380d">+23,455.68</td><td>34</td></tr><tr><td>2026-09-02</td><td>149,861.84</td><td>+41,715.00</td><td>-33,893.36</td><td style="color:#d4380d;font-weight:700">162,234.27</td><td style="color:#d4380d">+22,078.44</td><td>35</td></tr><tr><td>2026-09-03</td><td>150,229.02</td><td>+41,715.00</td><td>-32,696.53</td><td style="color:#d4380d;font-weight:700">163,834.88</td><td style="color:#d4380d">+4,567.30</td><td>35</td></tr></tbody>
+          </table>
+        </div>
+        
       
         <div class="block">
           <h2>年度 2026</h2>

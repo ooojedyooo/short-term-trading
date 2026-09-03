@@ -1143,6 +1143,22 @@ function renderYearlyCross() {
     html += '<div class="stat-card"><div class="label">修正后总额</div><div class="value ' + profitCls(yc.corrected) + '">' + fmtMoney(yc.corrected, true) + '</div></div>';
     html += '<div class="stat-card"><div class="label">已配对盈亏</div><div class="value ' + profitCls(yc.pair_pnl) + '">' + fmtMoney(yc.pair_pnl, true) + '</div></div>';
     html += '</div>';
+    // 历史趋势图：修正后总额随交易日的变化
+    const hist = yc.history || {};
+    if (hist.dates && hist.dates.length > 1) {
+        const pts = hist.dates.length;
+        const corrArr = hist.corr || [];
+        const peak = Math.max.apply(null, corrArr);
+        let trough = peak, mdd = 0;
+        corrArr.forEach(v => { if (v > peak) { peak = v; trough = v; } if (v < trough) trough = v; if (peak - trough > mdd) mdd = peak - trough; });
+        const delta = corrArr[corrArr.length - 1] - corrArr[0];
+        html += '<div style="margin-bottom:20px;padding:16px 18px;background:#fff;border:1px solid #eee;border-radius:10px;">';
+        html += '<h3 style="font-size:15px;margin:0 0 4px;color:#333;">📈 历史轨迹 · 年度口径随交易日的变化</h3>';
+        html += '<p style="color:#999;font-size:12px;margin:0 0 12px;">' + pts + ' 个交易日快照 · 区间变化 <b class="' + profitCls(delta) + '">' + fmtMoney(delta, true) + '</b> · 最大回撤 <b style="color:#1a9c5b;">' + fmtMoney(-mdd, true) + '</b></p>';
+        html += '<div id="yearlyHistChart" style="width:100%;height:380px;"></div>';
+        html += '<p style="color:#999;font-size:12px;line-height:1.7;margin:10px 0 0;">「修正后真实」为累计值，随每天跑批更新。系统现有 = 当日配对 + 未平仓成本；修正后 = 当日配对 + 月度跨天释放 + 年度跨月释放。快照按数据日期去重，同一天重复跑批覆盖旧值。</p>';
+        html += '</div>';
+    }
     // 配对明细表
     const items = yc.items || [];
     if (items.length === 0) {
@@ -1160,6 +1176,35 @@ function renderYearlyCross() {
         html += '</tbody></table>';
     }
     el.innerHTML = html;
+    // 渲染历史趋势图（切tab会重复进入，先dispose旧实例）
+    if (hist.dates && hist.dates.length > 1) {
+        if (chartMap['yearlyHistChart']) {
+            try { chartMap['yearlyHistChart'].dispose(); } catch(e){}
+            delete chartMap['yearlyHistChart'];
+        }
+        const hc = mkChart('yearlyHistChart');
+        if (hc) {
+            hc.setOption({
+                tooltip: { trigger: 'axis', valueFormatter: function(v){
+                    return (v>=0?'+':'') + Number(v).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); } },
+                legend: { data: ['系统现有','月度跨天释放','年度跨月释放','修正后真实'], bottom: 0, textStyle:{fontSize:12} },
+                grid: { left: 85, right: 30, bottom: 62, top: 40 },
+                xAxis: { type: 'category', data: hist.dates, axisLabel: { rotate: 45, fontSize: 10 } },
+                yAxis: { type: 'value', name: '盈亏(元)' },
+                series: [
+                    { name:'系统现有', type:'line', smooth:true, symbol:'circle', symbolSize:3,
+                      lineStyle:{width:2}, itemStyle:{color:'#95a5a6'}, data: hist.sys },
+                    { name:'月度跨天释放', type:'line', smooth:true, symbol:'circle', symbolSize:3,
+                      lineStyle:{width:2}, itemStyle:{color:'#f2994a'}, data: hist.mcross },
+                    { name:'年度跨月释放', type:'line', smooth:true, symbol:'circle', symbolSize:3,
+                      lineStyle:{width:2}, itemStyle:{color:'#2f80ed'}, data: hist.ycross },
+                    { name:'修正后真实', type:'line', smooth:true, symbol:'circle', symbolSize:4,
+                      lineStyle:{width:2.5}, itemStyle:{color:'#d4380d'},
+                      areaStyle:{color:'#d4380d',opacity:0.08}, data: hist.corr }
+                ]
+            });
+        }
+    }
     window.scrollTo({top: 0, behavior: 'smooth'});
 }
 function render() {

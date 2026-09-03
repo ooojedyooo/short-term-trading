@@ -515,13 +515,19 @@ def main():
     hist_html = ''
     try:
         from 跨天历史 import (rec_month, rec_year, upsert,
-                              load_snap, history_chart_html, build_trend_report)
+                              load_snap, history_chart_html,
+                              build_trend_report, trend_content)
         if mode == 'year':
             last_day = str(df[df['ym'].str.startswith(str(year))]['日期'].astype(str).str[:10].max())
             upsert('yearly', str(year), rec_year(last_day, results[str(year)]))
-            recs = load_snap()['yearly'].get(str(year), [])
-            hist_html = history_chart_html('year', recs)
-            print('[快照] 年度 {} @ {} 已入档，历史 {} 点'.format(year, last_day, len(recs)))
+            snap = load_snap()
+            recs = snap['yearly'].get(str(year), [])
+            # 年度页内嵌完整历史趋势：概况卡片 + 年度曲线 + 日环比 + 月度曲线 + 明细表
+            c = trend_content(snap)
+            hist_html = ('<script>%s</script>' % c['js']) + \
+                        c['overview'] + c['years'] + c['months'] + c['table']
+            print('[快照] 年度 {} @ {} 已入档，历史 {} 点（已内嵌趋势到本页）'.format(
+                year, last_day, len(recs)))
         elif mode == 'month':
             last_day = str(df[df['ym'] == mtag]['日期'].astype(str).str[:10].max())
             upsert('monthly', mtag, rec_month(last_day, results[mtag]))

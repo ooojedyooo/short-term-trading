@@ -1562,13 +1562,30 @@ def compute_yearly_cross():
         pair = sub[sub['type'] == 'pair']['盈亏金额'].sum()
         corrected = pair + monthly_cross_sum + cross_net
 
+        # 历史快照序列：供年度tab画「修正后随交易日变化」趋势图
+        history = {'dates': [], 'sys': [], 'mcross': [], 'ycross': [], 'corr': []}
+        try:
+            import json as _json
+            with open('reports/snapshots/跨天配对历史.json', encoding='utf-8') as _f:
+                _recs = _json.load(_f).get('yearly', {}).get(cy, [])
+            history = {
+                'dates': [r['d'] for r in _recs],
+                'sys': [r['sys'] for r in _recs],
+                'mcross': [r['mcross'] for r in _recs],
+                'ycross': [r['ycross'] for r in _recs],
+                'corr': [r['corr'] for r in _recs],
+            }
+        except Exception as he:
+            print('[warn] 读取跨天历史快照失败：%s' % he)
+
         return {
             'yearly_cross_net': round(cross_net, 2),
             'monthly_cross_sum': round(monthly_cross_sum, 2),
             'corrected': round(corrected, 2),
             'pair_pnl': round(pair, 2),
             'sys_total': round(sys_t, 2),
-            'items': items
+            'items': items,
+            'history': history
         }
     except Exception as e:
         print(f"[warn] 年度跨天数据计算失败：{e}"); return {}
