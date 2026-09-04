@@ -16,6 +16,8 @@
 import pandas as pd
 import json
 import os
+import sys
+import subprocess
 import argparse
 from datetime import date
 
@@ -536,6 +538,19 @@ def main():
             print('[快照] 月度 {} @ {} 已入档，历史 {} 点'.format(mtag, last_day, len(recs)))
         if mode in ('year', 'month'):
             print('[快照] 历史趋势报告已刷新：', build_trend_report(load_snap()))
+        # 汇总报告由主程序生成，早于本脚本，其年度历史曲线会慢一天（卡片是今天值、曲线停在昨天）。
+        # 快照入档后同步刷新，保证两处一致。用子进程调用，避免与主程序循环 import。
+        if mode == 'year':
+            try:
+                _r = subprocess.run([sys.executable, '重生成汇总报告.py'],
+                                    capture_output=True, text=True,
+                                    encoding='utf-8', errors='replace', timeout=300)
+                if _r.returncode == 0:
+                    print('[汇总] 汇总报告已同步最新快照')
+                else:
+                    print('[汇总] 刷新失败（不影响本次分析）：', (_r.stderr or '')[-200:])
+            except Exception as se:
+                print('[汇总] 刷新失败（不影响本次分析）：', se)
     except Exception as e:
         print('[快照] 跳过（不影响本次分析）：', e)
 

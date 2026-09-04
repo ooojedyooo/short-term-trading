@@ -1578,6 +1578,20 @@ def compute_yearly_cross():
         except Exception as he:
             print('[warn] 读取跨天历史快照失败：%s' % he)
 
+        # 兜底：主程序早于跨天脚本执行，快照里通常还没有「今天」。
+        # 若不补当天点，卡片显示今天值、曲线末点却是昨天，自相矛盾。
+        _today = datetime.now().strftime('%Y-%m-%d')
+        if not history['dates']:
+            history = {'dates': [_today], 'sys': [round(sys_t, 2)],
+                       'mcross': [round(monthly_cross_sum, 2)],
+                       'ycross': [round(cross_net, 2)], 'corr': [round(corrected, 2)]}
+        elif history['dates'][-1] != _today:
+            history['dates'].append(_today)
+            history['sys'].append(round(sys_t, 2))
+            history['mcross'].append(round(monthly_cross_sum, 2))
+            history['ycross'].append(round(cross_net, 2))
+            history['corr'].append(round(corrected, 2))
+
         return {
             'yearly_cross_net': round(cross_net, 2),
             'monthly_cross_sum': round(monthly_cross_sum, 2),
