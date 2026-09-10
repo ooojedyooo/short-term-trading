@@ -79,9 +79,9 @@ var Vr={},Br={};var Fr=function(){function t(t,e,n){var i=this;this._sleepAfterS
       <h2>总览</h2>
       <div class="cards">
         <div class="card"><div class="t">覆盖范围</div><div class="v">2026-09 月度跨天配对分析</div></div>
-        <div class="card"><div class="t">系统现有累计盈亏</div><div class="v" style="color:#d4380d">5,883.08</div></div>
-        <div class="card"><div class="t">跨期配对释放盈亏</div><div class="v" style="color:#d4380d">+697.30</div></div>
-        <div class="card"><div class="t">修正后累计真实盈亏</div><div class="v" style="color:#d4380d">6,853.19</div></div>
+        <div class="card"><div class="t">系统现有累计盈亏</div><div class="v" style="color:#d4380d">6,152.89</div></div>
+        <div class="card"><div class="t">跨期配对释放盈亏</div><div class="v" style="color:#d4380d">+796.17</div></div>
+        <div class="card"><div class="t">修正后累计真实盈亏</div><div class="v" style="color:#d4380d">7,234.33</div></div>
         <div class="card"><div class="t">跨期仍持有持仓数</div><div class="v">14 只</div></div>
       </div>
       <p class="hint">说明：跨期配对 = 将范围内每日配对后剩余的零散买入/卖出，按股票整合后用加权均价(WAC)配对。
@@ -91,7 +91,7 @@ var Vr={},Br={};var Fr=function(){function t(t,e,n){var i=this;this._sleepAfterS
     
       
     <div class="block">
-      <h2>历史轨迹 · 当月口径随交易日的变化（7 个快照点）</h2>
+      <h2>历史轨迹 · 当月口径随交易日的变化（8 个快照点）</h2>
       <div id="hc" style="width:100%;height:380px;"></div>
     </div>
     <script>
@@ -104,10 +104,10 @@ var Vr={},Br={};var Fr=function(){function t(t,e,n){var i=this;this._sleepAfterS
           valueFormatter:function(v){return fmtV(v);}},
         legend:{data:['系统现有','跨天释放','修正后真实'],top:0},
         grid:{left:80,right:30,bottom:60,top:40},
-        xAxis:{type:'category',data:["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09"],axisLabel:{rotate:45}},
+        xAxis:{type:'category',data:["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10"],axisLabel:{rotate:45}},
         yAxis:{type:'value',name:'元',axisLabel:{formatter:function(v){return v.toLocaleString('zh-CN');}}},
         dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:12}],
-        series:[{name:'系统现有',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#8c8c8c'},areaStyle:null,data:[-49.52, -74.52, 292.66, 1786.32, 2274.18, 3630.82, 5883.08]},{name:'跨天释放',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#f2994a'},areaStyle:null,data:[0.0, 0.0, 0.0, 0.0, 699.51, 697.3, 697.3]},{name:'修正后真实',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#d4380d'},areaStyle:{color:'#d4380d',opacity:0.08},data:[0.0, 0.0, 403.78, 1917.44, 3199.48, 4595.93, 6853.19]}]
+        series:[{name:'系统现有',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#8c8c8c'},areaStyle:null,data:[-49.52, -74.52, 292.66, 1786.32, 2274.18, 3630.82, 5883.08, 6152.89]},{name:'跨天释放',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#f2994a'},areaStyle:null,data:[0.0, 0.0, 0.0, 0.0, 699.51, 697.3, 697.3, 796.17]},{name:'修正后真实',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#d4380d'},areaStyle:{color:'#d4380d',opacity:0.08},data:[0.0, 0.0, 403.78, 1917.44, 3199.48, 4595.93, 6853.19, 7234.33]}]
       });
       window.addEventListener('resize',function(){c.resize();});
     })();
@@ -117,20 +117,20 @@ var Vr={},Br={};var Fr=function(){function t(t,e,n){var i=this;this._sleepAfterS
         <div class="block">
           <h2>月度 2026-09</h2>
           <div class="cards">
-            <div class="card"><div class="t">系统现有口径盈亏</div><div class="v" style="color:#d4380d">5,883.08</div></div>
-            <div class="card"><div class="t">跨期配对释放盈亏</div><div class="v" style="color:#d4380d">+697.30</div></div>
-            <div class="card"><div class="t">修正后真实盈亏</div><div class="v" style="color:#d4380d">6,853.19</div></div>
-            <div class="card"><div class="t">较现有偏差</div><div class="v" style="color:#d4380d">+970.11</div></div>
+            <div class="card"><div class="t">系统现有口径盈亏</div><div class="v" style="color:#d4380d">6,152.89</div></div>
+            <div class="card"><div class="t">跨期配对释放盈亏</div><div class="v" style="color:#d4380d">+796.17</div></div>
+            <div class="card"><div class="t">修正后真实盈亏</div><div class="v" style="color:#d4380d">7,234.33</div></div>
+            <div class="card"><div class="t">较现有偏差</div><div class="v" style="color:#d4380d">+1,081.44</div></div>
             </div>
           <h3>跨期配对明细（未平仓买卖整合匹配）</h3>
           <table>
             <thead><tr><th>股票</th><th>跨期买入剩余</th><th>跨期卖出剩余</th><th>跨期匹配</th><th>毛盈亏</th><th>交易成本</th><th>跨期净盈亏</th></tr></thead>
-            <tbody><tr><td>福晶科技<span class="code">2222.0</span></td><td>200股<br><span class="sub">13,157.00/股</span></td><td>100<br><span class="sub">6,659.00/股</span></td><td class="hl">100股</td><td style="color:#d4380d">80.50</td><td>13.33</td><td style="color:#d4380d;font-weight:700">67.17</td></tr><tr><td>兴森科技<span class="code">2436.0</span></td><td>200股<br><span class="sub">6,853.00/股</span></td><td>300<br><span class="sub">11,090.00/股</span></td><td class="hl">200股</td><td style="color:#d4380d">540.33</td><td>13.70</td><td style="color:#d4380d;font-weight:700">526.64</td></tr><tr><td>东材科技<span class="code">601208.0</span></td><td>300股<br><span class="sub">14,477.00/股</span></td><td>100<br><span class="sub">4,955.00/股</span></td><td class="hl">100股</td><td style="color:#d4380d">129.33</td><td>12.48</td><td style="color:#d4380d;font-weight:700">116.86</td></tr><tr><td>澜起科技<span class="code">688008.0</span></td><td>800股<br><span class="sub">156,241.72/股</span></td><td>600<br><span class="sub">117,250.00/股</span></td><td class="hl">600股</td><td style="color:#d4380d">68.71</td><td>82.07</td><td style="color:#16a34a;font-weight:700">-13.36</td></tr></tbody>
+            <tbody><tr><td>福晶科技<span class="code">2222.0</span></td><td>200股<br><span class="sub">13,157.00/股</span></td><td>100<br><span class="sub">6,659.00/股</span></td><td class="hl">100股</td><td style="color:#d4380d">80.50</td><td>13.33</td><td style="color:#d4380d;font-weight:700">67.17</td></tr><tr><td>兴森科技<span class="code">2436.0</span></td><td>200股<br><span class="sub">6,853.00/股</span></td><td>300<br><span class="sub">11,090.00/股</span></td><td class="hl">200股</td><td style="color:#d4380d">540.33</td><td>13.70</td><td style="color:#d4380d;font-weight:700">526.64</td></tr><tr><td>东材科技<span class="code">601208.0</span></td><td>300股<br><span class="sub">14,477.00/股</span></td><td>200<br><span class="sub">9,882.00/股</span></td><td class="hl">200股</td><td style="color:#d4380d">230.67</td><td>14.94</td><td style="color:#d4380d;font-weight:700">215.73</td></tr><tr><td>澜起科技<span class="code">688008.0</span></td><td>800股<br><span class="sub">156,241.72/股</span></td><td>600<br><span class="sub">117,250.00/股</span></td><td class="hl">600股</td><td style="color:#d4380d">68.71</td><td>82.07</td><td style="color:#16a34a;font-weight:700">-13.36</td></tr></tbody>
           </table>
           <h3>跨期仍完全未平仓持仓（已导出Excel）</h3>
           <table class="small">
             <thead><tr><th>股票</th><th>剩余买入</th><th>说明</th></tr></thead>
-            <tbody><tr><td>中国稀土<span class="code">831.0</span></td><td>600</td><td class="note">仅买入未平仓 600股（跨期持有底仓）</td></tr><tr><td>通富微电<span class="code">2156.0</span></td><td>100</td><td class="note">仅买入未平仓 100股（跨期持有底仓）</td></tr><tr><td>福晶科技<span class="code">2222.0</span></td><td>100</td><td class="note">仍买入未平仓 100股</td></tr><tr><td>兴森科技<span class="code">2436.0</span></td><td>-</td><td class="note">；仍卖出未平仓 100股</td></tr><tr><td>比亚迪<span class="code">2594.0</span></td><td>-</td><td class="note">仅卖出未平仓 100股（平旧仓，无对应买入）</td></tr><tr><td>英维克<span class="code">2837.0</span></td><td>600</td><td class="note">仅买入未平仓 600股（跨期持有底仓）</td></tr><tr><td>鼎龙股份<span class="code">300054.0</span></td><td>200</td><td class="note">仅买入未平仓 200股（跨期持有底仓）</td></tr><tr><td>芯片ETF<span class="code">512760.0</span></td><td>13,000</td><td class="note">仅买入未平仓 13000股（跨期持有底仓）</td></tr><tr><td>芯片设备<span class="code">561980.0</span></td><td>20,000</td><td class="note">仅买入未平仓 20000股（跨期持有底仓）</td></tr><tr><td>烽火通信<span class="code">600498.0</span></td><td>300</td><td class="note">仅买入未平仓 300股（跨期持有底仓）</td></tr><tr><td>东材科技<span class="code">601208.0</span></td><td>200</td><td class="note">仍买入未平仓 200股</td></tr><tr><td>澜起科技<span class="code">688008.0</span></td><td>200</td><td class="note">仍买入未平仓 200股</td></tr><tr><td>海光信息<span class="code">688041.0</span></td><td>200</td><td class="note">仅买入未平仓 200股（跨期持有底仓）</td></tr><tr><td>厦钨新能<span class="code">688778.0</span></td><td>-</td><td class="note">仅卖出未平仓 500股（平旧仓，无对应买入）</td></tr></tbody>
+            <tbody><tr><td>中国稀土<span class="code">831.0</span></td><td>600</td><td class="note">仅买入未平仓 600股（跨期持有底仓）</td></tr><tr><td>通富微电<span class="code">2156.0</span></td><td>100</td><td class="note">仅买入未平仓 100股（跨期持有底仓）</td></tr><tr><td>福晶科技<span class="code">2222.0</span></td><td>100</td><td class="note">仍买入未平仓 100股</td></tr><tr><td>兴森科技<span class="code">2436.0</span></td><td>-</td><td class="note">；仍卖出未平仓 100股</td></tr><tr><td>比亚迪<span class="code">2594.0</span></td><td>-</td><td class="note">仅卖出未平仓 100股（平旧仓，无对应买入）</td></tr><tr><td>英维克<span class="code">2837.0</span></td><td>600</td><td class="note">仅买入未平仓 600股（跨期持有底仓）</td></tr><tr><td>鼎龙股份<span class="code">300054.0</span></td><td>400</td><td class="note">仅买入未平仓 400股（跨期持有底仓）</td></tr><tr><td>芯片ETF<span class="code">512760.0</span></td><td>13,000</td><td class="note">仅买入未平仓 13000股（跨期持有底仓）</td></tr><tr><td>芯片设备<span class="code">561980.0</span></td><td>20,000</td><td class="note">仅买入未平仓 20000股（跨期持有底仓）</td></tr><tr><td>烽火通信<span class="code">600498.0</span></td><td>300</td><td class="note">仅买入未平仓 300股（跨期持有底仓）</td></tr><tr><td>东材科技<span class="code">601208.0</span></td><td>100</td><td class="note">仍买入未平仓 100股</td></tr><tr><td>澜起科技<span class="code">688008.0</span></td><td>200</td><td class="note">仍买入未平仓 200股</td></tr><tr><td>海光信息<span class="code">688041.0</span></td><td>200</td><td class="note">仅买入未平仓 200股（跨期持有底仓）</td></tr><tr><td>厦钨新能<span class="code">688778.0</span></td><td>-</td><td class="note">仅卖出未平仓 500股（平旧仓，无对应买入）</td></tr></tbody>
           </table>
         </div>
         
