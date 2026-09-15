@@ -820,6 +820,94 @@ def parse_pingan_excel(file_path):
     return df
 
 
+def parse_liangrong_excel(file_path):
+    """解析两融账户（券商）导出的当日成交汇总 Excel —— 按列名动态识别，不写死行号列号
+
+    文件结构（券商版本可能微调）：
+      - 头部若干行：营业部/用户名/资金账号/查询日期等元信息，中间可能夹空行
+      - 表头行：包含「证券代码」的那一行
+      - 数据行：表头之后的所有行
+      - 末行：可能多一行「合计」汇总行，必须剔除
+
+    ⚠ 历史坑（2026-09-15 券商升级）：
+      旧实现写死 `skiprows=4` + 7 个列名，新导出直接崩：
+        * 列数 7 → 8（新增「市场」列）→ ValueError: Length mismatch
+        * 列名「成交价格」→「成交均价」
+        * 证券代码不再带 \\t 前缀
+        * 末尾新增「合计」行
+      改为按列名取列后，上述变化全部免疫；未知新增列自动丢弃。
+
+    返回：规范化列 ['证券代码','证券名称','买卖类别','成交类型','成交数量','成交价格','成交金额']
+    """
+    raw = pd.read_excel(file_path, header=None, dtype=object)
+
+    # 1) 动态定位表头行（含「证券代码」的那一行），不用写死 skiprows
+    header_idx = None
+    for i in range(min(len(raw), 20)):
+        if any(str(v).strip() == '证券代码' for v in raw.iloc[i].tolist() if pd.notna(v)):
+            header_idx = i
+            break
+    if header_idx is None:
+        raise ValueError('未找到表头行（无「证券代码」列）：%s' % file_path)
+
+    header = [str(v).strip() if pd.notna(v) else '' for v in raw.iloc[header_idx].tolist()]
+    body = raw.iloc[header_idx + 1:].reset_index(drop=True)
+    body.columns = range(len(header))
+
+    # 2) 按列名映射取列，多余列（如「市场」）直接丢弃；兼容新旧价格列名
+    alias = {
+        '证券代码': '证券代码', '证券名称': '证券名称', '买卖类别': '买卖类别',
+        '成交类型': '成交类型', '成交数量': '成交数量', '成交金额': '成交金额',
+        '成交均价': '成交价格', '成交价格': '成交价格',
+    }
+    wanted = {}
+    for j, name in enumerate(header):
+        tgt = alias.get(name)
+        if tgt and tgt not in wanted:
+            wanted[tgt] = j
+
+    need = ['证券代码', '证券名称', '买卖类别', '成交数量', '成交价格', '成交金额']
+    missing = [c for c in need if c not in wanted]
+    if missing:
+        raise ValueError('两融文件缺少必要列 %s：%s' % (missing, file_path))
+
+    df = pd.DataFrame({col: body[j] for col, j in wanted.items()})
+    if '成交类型' not in df.columns:
+        df['成交类型'] = ''
+
+    # 3) 清洗：去制表符/空白
+    for col in ('证券代码', '证券名称'):
+        df[col] = (df[col].astype(str)
+                   .str.replace('\t', '', regex=False)
+                   .str.replace('\u3000', '', regex=False)
+                   .str.strip())
+    df['买卖类别'] = df['买卖类别'].astype(str).str.strip()
+
+    # 4) 剔除无效行：合计/小计/汇总行、空行、重复表头行、代码非法行
+    code = df['证券代码']
+    name = df['证券名称']
+    keep = code.str.len().eq(6) & code.str.isdigit()
+    keep &= ~name.str.contains('合计|总计|小计|汇总', na=False)
+    keep &= ~df['买卖类别'].str.contains('合计|总计|小计|汇总', na=False)
+    dropped = int((~keep).sum())
+    df = df[keep].reset_index(drop=True)
+    if dropped:
+        print('  [两融解析] 已忽略 %d 行非交易数据（合计/空行/表头）' % dropped)
+
+    # 5) 归一化买卖类别 —— 下游全部按「证券买入/证券卖出」精确匹配
+    #    ⚠ 券商新版导出为「限价买入/限价卖出」（旧版为「证券买入/证券卖出」），不归一化会一笔都认不出
+    df['买卖类别'] = df['买卖类别'].apply(
+        lambda x: '证券买入' if '买' in str(x) else ('证券卖出' if '卖' in str(x) else str(x))
+    )
+
+    # 6) 数值列转数字
+    for col in ('成交数量', '成交价格', '成交金额'):
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    df = df[df['成交数量'].notna() & df['成交价格'].notna()].reset_index(drop=True)
+
+    return df
+
+
 def process_excel_file(input_file):
     """处理单个Excel文件（根据来源路由到不同解析器）"""
     trading_date = extract_date_from_filename(input_file)
@@ -834,14 +922,7 @@ def process_excel_file(input_file):
     if source == '平安账户':
         df = parse_pingan_excel(input_file)
     else:
-        df = pd.read_excel(input_file, skiprows=4, header=0)
-        df.columns = ['证券代码', '证券名称', '买卖类别', '成交类型', '成交数量', '成交价格', '成交金额']
-        df['证券代码'] = df['证券代码'].astype(str).str.replace('\t', '')
-        df = df.dropna(subset=['证券代码'])
-        df = df[df['证券代码'] != '证券代码']
-        df['成交数量'] = pd.to_numeric(df['成交数量'], errors='coerce')
-        df['成交价格'] = pd.to_numeric(df['成交价格'], errors='coerce')
-        df['成交金额'] = pd.to_numeric(df['成交金额'], errors='coerce')
+        df = parse_liangrong_excel(input_file)
 
     buy_records = df[df['买卖类别'].str.contains('证券买入', na=False)].copy()
     sell_records = df[df['买卖类别'].str.contains('证券卖出', na=False)].copy()
@@ -1785,14 +1866,7 @@ def main():
                 if source == '平安账户':
                     df = parse_pingan_excel(excel_file)
                 else:
-                    df = pd.read_excel(excel_file, skiprows=4, header=0)
-                    df.columns = ['证券代码', '证券名称', '买卖类别', '成交类型', '成交数量', '成交价格', '成交金额']
-                    df['证券代码'] = df['证券代码'].astype(str).str.replace('\t', '')
-                    df = df.dropna(subset=['证券代码'])
-                    df = df[df['证券代码'] != '证券代码']
-                    df['成交数量'] = pd.to_numeric(df['成交数量'], errors='coerce')
-                    df['成交价格'] = pd.to_numeric(df['成交价格'], errors='coerce')
-                    df['成交金额'] = pd.to_numeric(df['成交金额'], errors='coerce')
+                    df = parse_liangrong_excel(excel_file)
 
                 buy_records = df[df['买卖类别'].str.contains('证券买入', na=False)].copy()
                 sell_records = df[df['买卖类别'].str.contains('证券卖出', na=False)].copy()

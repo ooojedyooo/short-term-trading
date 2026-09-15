@@ -79,9 +79,9 @@ var Vr={},Br={};var Fr=function(){function t(t,e,n){var i=this;this._sleepAfterS
       <h2>总览</h2>
       <div class="cards">
         <div class="card"><div class="t">覆盖范围</div><div class="v">2026-09 月度跨天配对分析</div></div>
-        <div class="card"><div class="t">系统现有累计盈亏</div><div class="v" style="color:#d4380d">6,152.89</div></div>
+        <div class="card"><div class="t">系统现有累计盈亏</div><div class="v" style="color:#d4380d">6,312.53</div></div>
         <div class="card"><div class="t">跨期配对释放盈亏</div><div class="v" style="color:#d4380d">+796.17</div></div>
-        <div class="card"><div class="t">修正后累计真实盈亏</div><div class="v" style="color:#d4380d">7,234.33</div></div>
+        <div class="card"><div class="t">修正后累计真实盈亏</div><div class="v" style="color:#d4380d">7,393.97</div></div>
         <div class="card"><div class="t">跨期仍持有持仓数</div><div class="v">14 只</div></div>
       </div>
       <p class="hint">说明：跨期配对 = 将范围内每日配对后剩余的零散买入/卖出，按股票整合后用加权均价(WAC)配对。
@@ -91,7 +91,7 @@ var Vr={},Br={};var Fr=function(){function t(t,e,n){var i=this;this._sleepAfterS
     
       
     <div class="block">
-      <h2>历史轨迹 · 当月口径随交易日的变化（8 个快照点）</h2>
+      <h2>历史轨迹 · 当月口径随交易日的变化（9 个快照点）</h2>
       <div id="hc" style="width:100%;height:380px;"></div>
     </div>
     <script>
@@ -104,10 +104,10 @@ var Vr={},Br={};var Fr=function(){function t(t,e,n){var i=this;this._sleepAfterS
           valueFormatter:function(v){return fmtV(v);}},
         legend:{data:['系统现有','跨天释放','修正后真实'],top:0},
         grid:{left:80,right:30,bottom:60,top:40},
-        xAxis:{type:'category',data:["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10"],axisLabel:{rotate:45}},
+        xAxis:{type:'category',data:["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-15"],axisLabel:{rotate:45}},
         yAxis:{type:'value',name:'元',axisLabel:{formatter:function(v){return v.toLocaleString('zh-CN');}}},
         dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:12}],
-        series:[{name:'系统现有',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#8c8c8c'},areaStyle:null,data:[-49.52, -74.52, 292.66, 1786.32, 2274.18, 3630.82, 5883.08, 6152.89]},{name:'跨天释放',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#f2994a'},areaStyle:null,data:[0.0, 0.0, 0.0, 0.0, 699.51, 697.3, 697.3, 796.17]},{name:'修正后真实',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#d4380d'},areaStyle:{color:'#d4380d',opacity:0.08},data:[0.0, 0.0, 403.78, 1917.44, 3199.48, 4595.93, 6853.19, 7234.33]}]
+        series:[{name:'系统现有',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#8c8c8c'},areaStyle:null,data:[-49.52, -74.52, 292.66, 1786.32, 2274.18, 3630.82, 5883.08, 6152.89, 6312.53]},{name:'跨天释放',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#f2994a'},areaStyle:null,data:[0.0, 0.0, 0.0, 0.0, 699.51, 697.3, 697.3, 796.17, 796.17]},{name:'修正后真实',type:'line',smooth:true,symbol:'circle',symbolSize:4,lineStyle:{width:2},itemStyle:{color:'#d4380d'},areaStyle:{color:'#d4380d',opacity:0.08},data:[0.0, 0.0, 403.78, 1917.44, 3199.48, 4595.93, 6853.19, 7234.33, 7393.97]}]
       });
       window.addEventListener('resize',function(){c.resize();});
     })();
@@ -117,9 +117,9 @@ var Vr={},Br={};var Fr=function(){function t(t,e,n){var i=this;this._sleepAfterS
         <div class="block">
           <h2>月度 2026-09</h2>
           <div class="cards">
-            <div class="card"><div class="t">系统现有口径盈亏</div><div class="v" style="color:#d4380d">6,152.89</div></div>
+            <div class="card"><div class="t">系统现有口径盈亏</div><div class="v" style="color:#d4380d">6,312.53</div></div>
             <div class="card"><div class="t">跨期配对释放盈亏</div><div class="v" style="color:#d4380d">+796.17</div></div>
-            <div class="card"><div class="t">修正后真实盈亏</div><div class="v" style="color:#d4380d">7,234.33</div></div>
+            <div class="card"><div class="t">修正后真实盈亏</div><div class="v" style="color:#d4380d">7,393.97</div></div>
             <div class="card"><div class="t">较现有偏差</div><div class="v" style="color:#d4380d">+1,081.44</div></div>
             </div>
           <h3>跨期配对明细（未平仓买卖整合匹配）</h3>
