@@ -260,7 +260,7 @@ body {
     </div>
 
     <div class="footer">
-        <p>报告生成时间：2026-09-16 15:20:32 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
+        <p>报告生成时间：2026-09-16 16:13:04 | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
     </div>
 </div>
 <script>
@@ -1128,6 +1128,16 @@ function renderMonthlyCross() {
     }
     const months = Object.keys(detail).sort().reverse();
     let html = '<div class="cross-header"><h2>月度跨天配对分析</h2><p style="color:#999;font-size:13px;">每天分析后的\"月度跨天释放\"汇总。点击月份查看该月内跨天配对的明细条目。</p></div>';
+    // ===== 月度盈亏构成对比图 =====
+    const asc = months.slice().reverse();  // 时间正序，左旧右新
+    const mcChartId = 'monthlyCrossChart';
+    const cntSum = asc.reduce(function(s, m) { return s + ((((detail[m] || {}).items) || []).length); }, 0);
+    html += '<div style="margin-bottom:20px;padding:16px 18px;background:#fff;border:1px solid #eee;border-radius:10px;">';
+    html += '<h3 style="font-size:15px;margin:0 0 4px;color:#333;">📊 月度盈亏构成对比</h3>';
+    html += '<p style="color:#999;font-size:12px;margin:0 0 12px;">共 ' + asc.length + ' 个月 · 配对明细合计 ' + cntSum + ' 笔 · 各月为独立口径（按月内配对计算，不做跨月加总）</p>';
+    html += '<div id="' + mcChartId + '" style="width:100%;height:380px;"></div>';
+    html += '<p style="color:#999;font-size:12px;line-height:1.7;margin:10px 0 0;">柱状（左轴，元）：系统现有盈亏 / 月度跨天释放 / 修正后总额；折线（右轴，笔）：配对条目数。<b>红涨绿跌</b>，点击月份行可展开该月明细。</p>';
+    html += '</div>';
     html += '<table class="cross-table"><thead><tr><th>月份</th><th>系统现有盈亏</th><th>月度跨天释放</th><th>修正后总额</th><th>配对条目数</th></tr></thead><tbody>';
     months.forEach(m => {
         const d = detail[m] || {};
@@ -1159,6 +1169,48 @@ function renderMonthlyCross() {
     });
     html += '</tbody></table>';
     el.innerHTML = html;
+    // 渲染月度构成图（切tab / 切时间范围会重复进入，先 dispose 旧实例）
+    if (chartMap[mcChartId]) {
+        try { chartMap[mcChartId].dispose(); } catch (e) {}
+        delete chartMap[mcChartId];
+    }
+    const mcc = mkChart(mcChartId);
+    if (mcc) {
+        const arrSys = asc.map(function(m) { return ((detail[m] || {}).sys) || 0; });
+        const arrCross = asc.map(function(m) { return ((detail[m] || {}).cross_net) || 0; });
+        const arrCorr = asc.map(function(m) { return ((detail[m] || {}).corrected) || 0; });
+        const arrCnt = asc.map(function(m) { return (((detail[m] || {}).items) || []).length; });
+        mcc.setOption({
+            tooltip: {
+                trigger: 'axis', axisPointer: { type: 'shadow' },
+                formatter: function(ps) {
+                    let s = ps[0].axisValue + '<br/>';
+                    ps.forEach(function(p) {
+                        if (p.seriesName === '配对条目数') {
+                            s += p.marker + p.seriesName + '：' + p.value + ' 笔<br/>';
+                        } else {
+                            s += p.marker + p.seriesName + '：' + fmtMoney(p.value, true) + '<br/>';
+                        }
+                    });
+                    return s;
+                }
+            },
+            legend: { data: ['系统现有盈亏', '月度跨天释放', '修正后总额', '配对条目数'], bottom: 0, textStyle: { fontSize: 12 } },
+            grid: { left: 88, right: 62, bottom: 64, top: 30 },
+            xAxis: { type: 'category', data: asc, axisLabel: { fontSize: 11 } },
+            yAxis: [
+                { type: 'value', name: '盈亏(元)', axisLabel: { fontSize: 11 } },
+                { type: 'value', name: '条目数(笔)', minInterval: 1, axisLabel: { fontSize: 11 }, splitLine: { show: false } }
+            ],
+            series: [
+                { name: '系统现有盈亏', type: 'bar', itemStyle: { color: '#95a5a6' }, data: arrSys },
+                { name: '月度跨天释放', type: 'bar', itemStyle: { color: '#f2994a' }, data: arrCross },
+                { name: '修正后总额', type: 'bar', itemStyle: { color: '#d4380d' }, data: arrCorr },
+                { name: '配对条目数', type: 'line', yAxisIndex: 1, smooth: true, symbol: 'circle', symbolSize: 7,
+                  lineStyle: { width: 2 }, itemStyle: { color: '#2f80ed' }, data: arrCnt }
+            ]
+        });
+    }
     window.scrollTo({top: 0, behavior: 'smooth'});
 }
 function toggleCrossMonth(row, m) {
