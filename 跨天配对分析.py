@@ -38,8 +38,28 @@ def _inline_echarts(html):
     return html.replace(tag, '<script>\n' + lib + '\n</script>')
 
 
+def norm_code(c):
+    """证券代码归一化：统一补前导 0 至 6 位字符串。
+
+    ⚠ 为什么必须归一化（2026-09-18 发现）：
+      两融/平安 Excel 导出的深市代码会丢前导 0（如 2436），而手机 OCR 出来的是完整
+      6 位（002436）。同一只票出现两种写法时，跨天配对按代码精确匹配会被拆成两只，
+      导致漏配（静默少算跨期释放）。历史数据里 4 位 106 行、3 位 28 行、2 位 8 行。
+      归一化后 '2436' / '002436' / 2436 / 2436.0 全部统一为 '002436'。
+    """
+    s = str(c).strip().replace('\t', '').replace('\u3000', '')
+    if s.endswith('.0'):
+        s = s[:-2]
+    if s.isdigit() and len(s) < 6:
+        s = s.zfill(6)
+    return s
+
+
 def load():
-    df = pd.read_excel(PATH, sheet_name='股票盈亏汇总')
+    # 读取时显式 dtype=str：否则 pandas 会把 '002436' 推断成数字 2436，
+    # 虽然"碰巧"能与短码 2436 合并，但一旦格式变化就会静默漏配，不能依赖。
+    df = pd.read_excel(PATH, sheet_name='股票盈亏汇总', dtype={'证券代码': str})
+    df['证券代码'] = df['证券代码'].apply(norm_code)   # ★ 统一 6 位，防同票被拆
     df['ym'] = df['日期'].astype(str).str[:7]
     # 行类型：含 '%' = 配对行（已配对）；含 '⚠' = 未平仓行
     def tag(x):

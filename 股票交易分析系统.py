@@ -138,7 +138,6 @@ STOCK_NAME_CORRECTIONS = {
     '300450': '先导智能',
     '601208': '东材科技',
     '000831': '中国稀土',   # 两融券商导出名"中国稀士"与手机OCR"中国稀土"不统一，强制用标准名
-    '831': '中国稀土',      # 000831 归一化后可能为 '831'
 }
 
 
@@ -302,7 +301,7 @@ def parse_image_trades(image_path):
             continue
 
         raw_records.append({
-            '证券代码': stock_code,
+            '证券代码': norm_code(stock_code),
             '证券名称': stock_name,
             '买卖类别': direction,
             '成交数量': volume,
@@ -338,11 +337,8 @@ def parse_image_trades(image_path):
                 rec['证券名称'] = best_names[code]
             else:
                 rec['证券名称'] = '未知'
-        # 用名称修正表覆盖OCR截断/误读的名称（code先归一化为字符串，兼容 int/float/str 三种类型）
-        try:
-            code_key = str(int(float(rec['证券代码'])))
-        except (ValueError, TypeError):
-            code_key = str(rec['证券代码'])
+        # 用名称修正表覆盖OCR截断/误读的名称（★ 统一 6 位，否则 '002436'→'2436' 查不到表）
+        code_key = norm_code(rec['证券代码'])
         if code_key in STOCK_NAME_CORRECTIONS:
             rec['证券名称'] = STOCK_NAME_CORRECTIONS[code_key]
 
@@ -724,7 +720,7 @@ def parse_pingan_image_trades(image_path):
             continue
 
         trades.append({
-            '证券代码': code,
+            '证券代码': norm_code(code),
             '证券名称': name,
             '买卖类别': direction,
             '成交类型': '成交',
@@ -800,7 +796,9 @@ def parse_pingan_excel(file_path):
     )
 
     # 证券代码清洗（去除非数字字符）
-    df['证券代码'] = df['证券代码'].astype(str).str.replace(r'[^0-9]', '', regex=True)
+    df['证券代码'] = (df['证券代码'].astype(str)
+                      .str.replace(r'[^0-9]', '', regex=True)
+                      .apply(norm_code))   # 统一 6 位，防深市代码丢前导 0
     df['成交数量'] = pd.to_numeric(df['成交数量'], errors='coerce')
     df['成交价格'] = pd.to_numeric(df['成交价格'], errors='coerce')
     df['成交金额'] = pd.to_numeric(df['成交金额'], errors='coerce')
@@ -818,6 +816,22 @@ def parse_pingan_excel(file_path):
                   f"数量={int(row['成交数量'])} 均价={row['成交价格']:.4f} 金额={row['成交金额']:.2f}")
 
     return df
+
+
+def norm_code(c):
+    """证券代码归一化：统一补前导 0 至 6 位字符串。
+
+    ⚠ 为什么必须归一化（2026-09-18 发现）：
+      两融/平安 Excel 导出的深市代码会丢前导 0（如 2436），手机 OCR 出来的是完整
+      6 位（002436）。同一只票两种写法，跨天配对按代码精确匹配时会被拆成两只 → 漏配。
+      归一化后 '2436' / '002436' / 2436 / 2436.0 全部统一为 '002436'。
+    """
+    s = str(c).strip().replace('\t', '').replace('\u3000', '')
+    if s.endswith('.0'):
+        s = s[:-2]
+    if s.isdigit() and len(s) < 6:
+        s = s.zfill(6)
+    return s
 
 
 def parse_liangrong_excel(file_path):
@@ -875,12 +889,12 @@ def parse_liangrong_excel(file_path):
     if '成交类型' not in df.columns:
         df['成交类型'] = ''
 
-    # 3) 清洗：去制表符/空白
-    for col in ('证券代码', '证券名称'):
-        df[col] = (df[col].astype(str)
-                   .str.replace('\t', '', regex=False)
-                   .str.replace('\u3000', '', regex=False)
-                   .str.strip())
+    # 3) 清洗：证券代码统一 6 位（补前导 0），名称去制表符/空白
+    df['证券代码'] = df['证券代码'].apply(norm_code)
+    df['证券名称'] = (df['证券名称'].astype(str)
+                      .str.replace('\t', '', regex=False)
+                      .str.replace('\u3000', '', regex=False)
+                      .str.strip())
     df['买卖类别'] = df['买卖类别'].astype(str).str.strip()
 
     # 4) 剔除无效行：合计/小计/汇总行、空行、重复表头行、代码非法行
@@ -1052,7 +1066,7 @@ def calculate_profits(df, buy_records, sell_records, trading_date, source):
             profit_results.append({
                 '日期': trading_date,
                 '数据来源': display_source,
-                '证券代码': stock_code,
+                '证券代码': norm_code(stock_code),
                 '证券名称': stock_name,
                 '买入数量': int(total_buy_qty),
                 '卖出数量': int(total_sell_qty),
@@ -1102,7 +1116,7 @@ def calculate_profits(df, buy_records, sell_records, trading_date, source):
         profit_results.append({
             '日期': trading_date,
             '数据来源': display_source,
-            '证券代码': stock_code,
+            '证券代码': norm_code(stock_code),
             '证券名称': stock_name,
             '买入数量': int(total_buy_qty),
             '卖出数量': int(total_sell_qty),
@@ -1133,7 +1147,7 @@ def calculate_profits(df, buy_records, sell_records, trading_date, source):
             profit_results.append({
                 '日期': trading_date,
                 '数据来源': display_source,
-                '证券代码': stock_code,
+                '证券代码': norm_code(stock_code),
                 '证券名称': stock_name,
                 '买入数量': int(unmatched_buy_qty),
                 '卖出数量': 0,
@@ -1158,7 +1172,7 @@ def calculate_profits(df, buy_records, sell_records, trading_date, source):
             profit_results.append({
                 '日期': trading_date,
                 '数据来源': display_source,
-                '证券代码': stock_code,
+                '证券代码': norm_code(stock_code),
                 '证券名称': stock_name,
                 '买入数量': 0,
                 '卖出数量': int(unmatched_sell_qty),
@@ -1186,14 +1200,22 @@ def append_to_excel(result_df, trading_date, source):
     if len(result_df) == 0:
         return
 
+    # ★ 写入前先归一化本次结果（防解析器产出短代码）
+    result_df = result_df.copy()
+    result_df['证券代码'] = result_df['证券代码'].apply(norm_code)
+
     if os.path.exists(EXCEL_OUTPUT):
-        existing_df = pd.read_excel(EXCEL_OUTPUT)
+        # dtype=str：否则 pandas 把 '002436' 读成数字 2436，再写回就丢了前导 0
+        existing_df = pd.read_excel(EXCEL_OUTPUT, dtype={'证券代码': str})
         # 删除该日期的旧数据（整日替换，因为跨账户匹配可能改变所有记录）
         existing_df = existing_df[existing_df['日期'] != trading_date]
         combined_df = pd.concat([existing_df, result_df], ignore_index=True)
         combined_df = combined_df.sort_values(['日期', '数据来源']).reset_index(drop=True)
     else:
         combined_df = result_df
+
+    # ★ 兜底：历史遗留的短代码（4位/3位/2位）也一并补齐到 6 位
+    combined_df['证券代码'] = combined_df['证券代码'].apply(norm_code)
 
     wb = Workbook()
     ws = wb.active
@@ -1215,7 +1237,8 @@ def append_to_excel(result_df, trading_date, source):
     for idx, row in enumerate(combined_df.itertuples(index=False), 2):
         ws.cell(row=idx, column=1, value=row.日期)
         ws.cell(row=idx, column=2, value=row.数据来源)
-        ws.cell(row=idx, column=3, value=row.证券代码)
+        code_cell = ws.cell(row=idx, column=3, value=str(row.证券代码))
+        code_cell.number_format = '@'   # 文本格式：防 Excel 把 002436 按数字显示成 2436
         ws.cell(row=idx, column=4, value=row.证券名称)
         ws.cell(row=idx, column=5, value=row.买入数量)
         ws.cell(row=idx, column=6, value=row.卖出数量)
@@ -1267,7 +1290,8 @@ def generate_html_report_from_summary(trading_date):
         print(f"汇总文件不存在，无法生成 {trading_date} 的报告")
         return
 
-    summary_df = pd.read_excel(EXCEL_OUTPUT)
+    summary_df = pd.read_excel(EXCEL_OUTPUT, dtype={'证券代码': str})
+    summary_df['证券代码'] = summary_df['证券代码'].apply(norm_code)   # ★ 统一 6 位
     day_df = summary_df[summary_df['日期'] == trading_date].copy()
 
     if len(day_df) == 0:
@@ -1542,15 +1566,10 @@ def compute_stock_cross():
         for ym in sorted(df['ym'].unique()):
             r = kt.analyze(df[df['ym'] == ym])
             for c in r['cross']:
-                raw_code = c['code']
-                # 归一化为干净的整数串：跨天脚本从 Excel 读出的证券代码可能是
-                # np.float64（如 300014.0），json.dumps 后变成 "300014.0"，
-                # 与汇总表主程序读出的 "300014" 对不上，导致 STOCK_CROSS[code]
-                # 全部 undefined、跨天释放全部显示为 0。这里统一成整数字符串。
-                try:
-                    code = str(int(float(raw_code)))
-                except (ValueError, TypeError):
-                    code = str(raw_code)
+                # ★ 统一 6 位字符串：跨天脚本读出的代码可能是 np.float64（300014.0），
+                #   旧写法 str(int(float())) 会把 '002436' 变成 '2436'，与汇总表主程序
+                #   的 6 位键对不上 → STOCK_CROSS[code] 全 undefined、跨天释放显示 0。
+                code = norm_code(c['code'])
                 if code not in agg:
                     agg[code] = {'code': code, 'name': c['name'], 'cross': 0.0}
                 agg[code]['cross'] += float(c['net'])
@@ -1572,10 +1591,7 @@ def compute_monthly_cross_detail():
             r = kt.analyze(df[df['ym'] == ym])
             items = []
             for c in r['cross']:
-                try:
-                    code = str(int(float(c['code'])))
-                except (ValueError, TypeError):
-                    code = str(c['code'])
+                code = norm_code(c['code'])   # ★ 统一 6 位
                 items.append({
                     'code': code, 'name': c['name'],
                     'buy_q': int(c.get('buy_q', 0)), 'sell_q': int(c.get('sell_q', 0)),
@@ -1607,10 +1623,7 @@ def compute_yearly_cross():
             r = kt.analyze(df[df['ym'] == ym])
             monthly_cross_sum += r['cross_net']
             for rem in r['remain']:
-                try:
-                    code = str(int(float(rem['code'])))
-                except (ValueError, TypeError):
-                    code = str(rem['code'])
+                code = norm_code(rem['code'])   # ★ 统一 6 位
                 if code not in remain:
                     remain[code] = {'code': code, 'name': rem['name'],
                         'buy_q': 0, 'buy_amt': 0.0, 'sell_q': 0, 'sell_amt': 0.0}
@@ -1692,21 +1705,21 @@ def generate_summary_html():
         print("未找到汇总文件，跳过汇总报告生成")
         return
 
-    df = pd.read_excel(EXCEL_OUTPUT)
+    # ★ dtype=str：否则 pandas/openpyxl 可能把文本代码读成数字，前导 0 丢失
+    df = pd.read_excel(EXCEL_OUTPUT, dtype={'证券代码': str})
     if len(df) == 0:
         print("汇总文件无数据，跳过汇总报告生成")
         return
 
     df['日期'] = pd.to_datetime(df['日期']).dt.strftime('%Y-%m-%d')
+    df['证券代码'] = df['证券代码'].apply(norm_code)   # ★ 统一 6 位
 
     import json
     records = []
     for _, row in df.iterrows():
-        # 归一化证券代码为整数串，避免 Excel 读出 float（300014.0）导致与跨天脚本键错位
-        try:
-            rec_code = str(int(float(row['证券代码'])))
-        except (ValueError, TypeError):
-            rec_code = str(row['证券代码'])
+        # ★ 统一 6 位字符串。⚠ 旧写法 str(int(float(...))) 会把 '002222' 变成 '2222'，
+        #   前导 0 丢失后与跨天脚本的 6 位键对不上（2026-09-19 修）
+        rec_code = norm_code(row['证券代码'])
         records.append({
             'date': str(row['日期']),
             'source': str(row['数据来源']),
@@ -1957,10 +1970,7 @@ def main():
             # 统一证券名称：两融/平安/手机各来源可能有名称差异（如"中国稀士"vs"中国稀土"），用纠错表强制统一
             for idx, row in merged_df.iterrows():
                 code_raw = str(row.get('证券代码', '')).strip()
-                try:
-                    code_key = str(int(float(code_raw)))
-                except (ValueError, TypeError):
-                    code_key = code_raw
+                code_key = norm_code(code_raw)   # ★ 统一 6 位
                 if code_key in STOCK_NAME_CORRECTIONS:
                     merged_df.at[idx, '证券名称'] = STOCK_NAME_CORRECTIONS[code_key]
             if len(merged_df) == 0:
