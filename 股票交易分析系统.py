@@ -1869,10 +1869,19 @@ def archive_file(input_file):
 
 
 def find_input_files():
-    """查找待处理的所有输入文件（Excel + 图片）"""
+    """查找待处理的所有输入文件（Excel + 图片）
+
+    ⚠ 排除规则（别删）：
+      - 输出文件 `股票交易盈亏汇总.xlsx` 自身
+      - Excel 临时锁文件 `~$xxx.xlsx`
+      - **以 `.` 开头的文件**（如 `.backup_xxx.xlsx`）——备份/隐藏文件。
+        实测 glob 的 `*` 目前不匹配前导点，但这属于"靠巧合安全"；一旦被当输入，
+        会按文件名解析日期后**整日替换**汇总表真实数据，必须显式挡住。
+    """
     excel_files = [f for f in glob.glob('*.xlsx') + glob.glob('*.xls')
                    if f not in ['股票交易盈亏汇总.xlsx']
-                   and not f.startswith('~$')]
+                   and not f.startswith('~$')
+                   and not os.path.basename(f).startswith('.')]
 
     image_extensions = ['*.png', '*.jpg', '*.jpeg']
     image_files = []
