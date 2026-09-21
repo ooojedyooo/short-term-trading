@@ -1699,6 +1699,65 @@ def compute_yearly_cross():
         print(f"[warn] 年度跨天数据计算失败：{e}"); return {}
 
 
+def compute_unmatched_detail():
+    """未配对持仓明细（「未配对」tab 的数据源）。
+
+    两个层级，**口径不同、不能相加**：
+      - months[]：第 i 个月内先做当月跨天配对，配对后仍**完全单边挂着**的剩余
+      - year    ：把各月剩余按证券代码 SUM 合并成跨月持有池后再配对，
+                  最终仍完全单边挂着的部分（即「全年匹配后未配对」）
+    统计范围：汇总表里数据的最后一天（截至当前统计的最后一天）。
+    """
+    try:
+        import importlib
+        kt = importlib.import_module('跨天配对分析')
+        df = kt.load()
+        if len(df) == 0:
+            return {}
+
+        last_date = str(df['日期'].astype(str).str[:10].max())
+        cur_year = last_date[:4]
+
+        def pack(items):
+            out = []
+            for r in items:
+                out.append({
+                    'code': norm_code(r['code']),
+                    'name': str(r['name']),
+                    'buyQty': int(r.get('remain_buy', 0)),
+                    'buyAmt': round(float(r.get('remain_buy_amt', 0) or 0), 2),
+                    'sellQty': int(r.get('remain_sell', 0)),
+                    'sellAmt': round(float(r.get('remain_sell_amt', 0) or 0), 2),
+                    'note': str(r.get('note', '')),
+                })
+            # 金额大的排前面，一眼看到主要占用
+            out.sort(key=lambda x: -(x['buyAmt'] + x['sellAmt']))
+            return {
+                'items': out,
+                'count': len(out),
+                'buyQty': sum(x['buyQty'] for x in out),
+                'buyAmt': round(sum(x['buyAmt'] for x in out), 2),
+                'sellQty': sum(x['sellQty'] for x in out),
+                'sellAmt': round(sum(x['sellAmt'] for x in out), 2),
+            }
+
+        months = []
+        for ym in sorted(df['ym'].unique()):
+            p = pack(kt.analyze(df[df['ym'] == ym])['remain'])
+            p['ym'] = ym
+            months.append(p)
+
+        year_pack = pack(kt.analyze_year(df, cur_year)['remain'])
+        year_pack['year'] = cur_year
+
+        print("[未配对] 截至 %s：月度分组 %d 个 / 月度未配对合计 %d 笔 / 全年匹配后未配对 %d 笔"
+              % (last_date, len(months),
+                 sum(m['count'] for m in months), year_pack['count']))
+        return {'last_date': last_date, 'months': months, 'year': year_pack}
+    except Exception as e:
+        print(f"[warn] 未配对明细计算失败：{e}"); return {}
+
+
 def generate_summary_html():
     """生成交互式汇总可视化HTML报告"""
     if not os.path.exists(EXCEL_OUTPUT):
@@ -1769,6 +1828,10 @@ def generate_summary_html():
     # 年度跨月配对数据（各月剩余SUM合并后跨月配对），用于年度跨天tab + 本年统计卡片
     yearly_cross = compute_yearly_cross()
     html_content = html_content.replace('{__YEARLY_CROSS__}', json.dumps(yearly_cross, ensure_ascii=False))
+
+    # 未配对持仓明细（月度分组 + 全年匹配后剩余），用于「未配对」tab
+    unmatched = compute_unmatched_detail()
+    html_content = html_content.replace('{__UNMATCHED__}', json.dumps(unmatched, ensure_ascii=False))
 
     # 占位符全部替换完后，再把本地ECharts内联进HTML（单文件自包含，杜绝CDN/相对路径导致的白屏）
     html_content = inline_echarts(html_content)

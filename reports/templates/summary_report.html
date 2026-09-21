@@ -176,6 +176,7 @@ body {
         <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">📅 盈亏日历</button>
         <button class="tab-btn" data-tab="monthly_cross" onclick="switchTab('monthly_cross')">📆 月度跨天</button>
         <button class="tab-btn" data-tab="yearly_cross" onclick="switchTab('yearly_cross')">📅 年度跨天</button>
+        <button class="tab-btn" data-tab="unmatched" onclick="switchTab('unmatched')">📌 未配对持仓</button>
     </div>
     <!-- 筛选条 -->
     <div class="filter-bar">
@@ -211,6 +212,9 @@ body {
     <div class="page-container" id="pageYearlyCross">
         <div id="yearlyCrossContent" style="padding:24px 30px;"></div>
     </div>
+    <div class="page-container" id="pageUnmatched">
+        <div id="unmatchedContent" style="padding:24px 30px;"></div>
+    </div>
 
     <div class="footer">
         <p>报告生成时间：{__GEN_TIME__} | 数据来源：股票交易盈亏汇总.xlsx | v4.0</p>
@@ -223,6 +227,7 @@ const MONTHLY_CROSS = {__MONTHLY_CROSS__};
 const MONTHLY_CROSS_DETAIL = {__MONTHLY_CROSS_DETAIL__};
 const YEARLY_CROSS = {__YEARLY_CROSS__};
 const STOCK_CROSS = {__STOCK_CROSS__};
+const UNMATCHED = {__UNMATCHED__};
 let state = { view: 'overview', filterType: 'mtd', customStart: '', customEnd: '', drillParam: null, activeTab: 'overview' };
 let navStack = [];
 const chartMap = {};
@@ -291,6 +296,9 @@ function switchTab(tab) {
     } else if (tab === 'yearly_cross') {
         document.getElementById('pageYearlyCross').classList.add('active');
         renderYearlyCross();
+    } else if (tab === 'unmatched') {
+        document.getElementById('pageUnmatched').classList.add('active');
+        renderUnmatched();
     }
 }
 function setFilter(type) {
@@ -307,6 +315,7 @@ function setFilter(type) {
     if (state.activeTab === 'calendar') renderCalendarView();
     if (state.activeTab === 'monthly_cross') renderMonthlyCross();
     if (state.activeTab === 'yearly_cross') renderYearlyCross();
+    if (state.activeTab === 'unmatched') renderUnmatched();
 }
 function applyCustomFilter() {
     state.customStart = document.getElementById('startDate').value;
@@ -317,6 +326,7 @@ function applyCustomFilter() {
         if (state.activeTab === 'calendar') renderCalendarView();
         if (state.activeTab === 'monthly_cross') renderMonthlyCross();
         if (state.activeTab === 'yearly_cross') renderYearlyCross();
+        if (state.activeTab === 'unmatched') renderUnmatched();
     }
 }
 function drillTo(view, param) {
@@ -1258,6 +1268,137 @@ function renderYearlyCross() {
         }
     }
     window.scrollTo({top: 0, behavior: 'smooth'});
+}
+/* ====== 未配对持仓（月度分组 + 全年匹配后剩余） ====== */
+function unmatchedTable(items) {
+    let h = '<table class="cross-table" style="margin-bottom:0;"><thead><tr>'
+          + '<th>股票</th><th>剩余买入量</th><th>买入金额</th><th>剩余卖出量</th><th>卖出金额</th><th>说明</th>'
+          + '</tr></thead><tbody>';
+    items.forEach(it => {
+        const bq = it.buyQty ? it.buyQty.toLocaleString('zh-CN') : '—';
+        const sq = it.sellQty ? it.sellQty.toLocaleString('zh-CN') : '—';
+        h += '<tr style="cursor:pointer;" onclick="switchTab(\'overview\'); setTimeout(()=>drillTo(\'stock\',\'' + it.name + '\'),100);">';
+        h += '<td><b>' + it.name + '</b> <span style="color:#aaa;font-size:11px;">' + it.code + '</span></td>';
+        h += '<td>' + bq + '</td>';
+        h += '<td>' + (it.buyAmt ? fmtMoney(it.buyAmt) : '—') + '</td>';
+        h += '<td>' + sq + '</td>';
+        h += '<td>' + (it.sellAmt ? fmtMoney(it.sellAmt) : '—') + '</td>';
+        h += '<td style="text-align:left;color:#888;font-size:12px;">' + (it.note || '') + '</td>';
+        h += '</tr>';
+    });
+    h += '</tbody></table>';
+    return h;
+}
+function renderUnmatched() {
+    const el = document.getElementById('unmatchedContent');
+    const U = (typeof UNMATCHED !== 'undefined' && UNMATCHED && UNMATCHED.months) ? UNMATCHED : null;
+    if (!U) {
+        el.innerHTML = '<div class="empty-state">暂无未配对数据</div>';
+        return;
+    }
+    const allMonths = U.months || [];
+    const months = allMonths.filter(m => m.count > 0);
+    const yr = U.year || { items: [], count: 0, buyQty: 0, buyAmt: 0, sellQty: 0, sellAmt: 0, year: '' };
+    const monthItems = allMonths.reduce((s, m) => s + m.count, 0);
+
+    let html = '';
+    // ---- 头部说明 ----
+    html += '<div class="cross-header">';
+    html += '<h2>📌 未配对持仓明细</h2>';
+    html += '<p style="color:#999;font-size:13px;">统计截至 <b>' + (U.last_date || '') + '</b>（汇总表数据的最后一天）。「未配对」= 买卖没对上、仍单边挂着的部分。</p>';
+    html += '<p style="color:#b06a00;font-size:12px;line-height:1.8;margin-top:8px;background:#fffbf5;border-left:3px solid #f2994a;padding:8px 12px;border-radius:4px;">'
+          + '<b>两层口径不同，不能相加：</b><br>'
+          + '· <b>月度层</b> —— 每个月先在本月内配对，配对后仍单边挂着的（当月视角的欠账）<br>'
+          + '· <b>全年层</b> —— 各月剩余按股票合并后<b>再跨月配对</b>，最终仍单边挂着的（真正的年度欠账）<br>'
+          + '所以全年笔数少于月度合计，差额就是「跨月配上了」的那部分。</p>';
+    html += '</div>';
+
+    // ---- 概览卡片 ----
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px;">';
+    html += '<div class="stat-card"><div class="label">涉及月份</div><div class="value neutral">' + months.length + ' 个月</div></div>';
+    html += '<div class="stat-card"><div class="label">月度未配对条目</div><div class="value neutral">' + monthItems + ' 笔</div></div>';
+    html += '<div class="stat-card"><div class="label">全年未配对</div><div class="value neutral">' + yr.count + ' 笔</div></div>';
+    html += '<div class="stat-card"><div class="label">全年买入未平仓</div><div class="value neutral">' + fmtMoney(yr.buyAmt) + '</div></div>';
+    html += '<div class="stat-card"><div class="label">全年卖出未平仓</div><div class="value neutral">' + fmtMoney(yr.sellAmt) + '</div></div>';
+    html += '</div>';
+
+    // ---- 各月未配对金额图 ----
+    html += '<div style="margin-bottom:20px;padding:16px 18px;background:#fff;border:1px solid #eee;border-radius:10px;">';
+    html += '<h3 style="font-size:15px;margin:0 0 4px;color:#333;">📊 各月未配对金额</h3>';
+    html += '<p style="color:#999;font-size:12px;margin:0 0 12px;">柱状（左轴，元）：剩余买入金额 / 剩余卖出金额；折线（右轴，笔）：未配对条目数</p>';
+    html += '<div id="unmatchedChart" style="width:100%;height:340px;"></div>';
+    html += '<p style="color:#999;font-size:12px;line-height:1.7;margin:10px 0 0;">剩余买入 = 买了还没卖掉的仓；剩余卖出 = 卖了但没有对应买入的（多为平更早的仓）。</p>';
+    html += '</div>';
+
+    // ---- 按月分组明细 ----
+    if (months.length === 0) {
+        html += '<div class="empty-state">各月买卖均已配对，无未配对记录 🎉</div>';
+    } else {
+        html += '<h3 style="font-size:16px;color:#2c3e50;margin:24px 0 12px;border-left:4px solid #2f80ed;padding-left:10px;">🗓 按月分组 · 月度未配对明细</h3>';
+        months.forEach(m => {
+            html += '<div style="margin-bottom:16px;padding:14px 16px;background:#fff;border:1px solid #eee;border-radius:10px;">';
+            html += '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:10px;">';
+            html += '<h4 style="font-size:15px;margin:0;color:#2c3e50;">' + m.ym + '<span style="font-size:12px;color:#999;font-weight:normal;margin-left:8px;">' + m.count + ' 笔未配对</span></h4>';
+            html += '<span style="font-size:12px;color:#888;">买 ' + m.buyQty.toLocaleString('zh-CN') + ' 股 / ' + fmtMoney(m.buyAmt) + '　·　卖 ' + m.sellQty.toLocaleString('zh-CN') + ' 股 / ' + fmtMoney(m.sellAmt) + '</span>';
+            html += '</div>';
+            html += unmatchedTable(m.items);
+            html += '</div>';
+        });
+    }
+
+    // ---- 全年匹配后未配对 ----
+    html += '<div style="margin-top:26px;padding:16px 18px;background:#fffbf5;border:2px solid #f2994a;border-radius:10px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:6px;">';
+    html += '<h3 style="font-size:16px;margin:0;color:#d4380d;">🎯 全年匹配后未配对（' + (yr.year || '') + ' 年）</h3>';
+    html += '<span style="font-size:12px;color:#888;">买 ' + yr.buyQty.toLocaleString('zh-CN') + ' 股 / ' + fmtMoney(yr.buyAmt) + '　·　卖 ' + yr.sellQty.toLocaleString('zh-CN') + ' 股 / ' + fmtMoney(yr.sellAmt) + '</span>';
+    html += '</div>';
+    html += '<p style="color:#999;font-size:12px;margin:0 0 12px;">各月剩余持仓按证券代码合并后<b>再做一次跨月配对</b>，配对完还剩下的就是这里的 ' + yr.count + ' 笔——这才是全年真正没平掉的仓。</p>';
+    if (yr.count === 0) {
+        html += '<div style="padding:12px;color:#999;">全年买卖全部匹配，无未配对持仓 🎉</div>';
+    } else {
+        html += unmatchedTable(yr.items);
+    }
+    html += '</div>';
+
+    html += '<p style="color:#aaa;font-size:12px;margin-top:18px;text-align:center;">本页始终展示全量数据（截至 ' + (U.last_date || '') + '），不受上方「时间范围」筛选影响。</p>';
+
+    el.innerHTML = html;
+
+    // 渲染各月未配对金额图（切 tab 会重复进入，先 dispose 旧实例）
+    if (chartMap['unmatchedChart']) {
+        try { chartMap['unmatchedChart'].dispose(); } catch (e) {}
+        delete chartMap['unmatchedChart'];
+    }
+    const uc = mkChart('unmatchedChart');
+    if (uc) {
+        uc.setOption({
+            tooltip: {
+                trigger: 'axis', axisPointer: { type: 'shadow' },
+                formatter: function (ps) {
+                    let s = ps[0].axisValue + '<br/>';
+                    ps.forEach(function (p) {
+                        s += p.marker + p.seriesName + '：'
+                           + (p.seriesName === '未配对条目数' ? p.value + ' 笔' : fmtMoney(p.value)) + '<br/>';
+                    });
+                    return s;
+                }
+            },
+            legend: { data: ['剩余买入金额', '剩余卖出金额', '未配对条目数'], bottom: 0, textStyle: { fontSize: 12 } },
+            grid: { left: 96, right: 62, bottom: 64, top: 30 },
+            xAxis: { type: 'category', data: months.map(m => m.ym), axisLabel: { fontSize: 11 } },
+            yAxis: [
+                { type: 'value', name: '金额(元)', axisLabel: { fontSize: 11 } },
+                { type: 'value', name: '条目数(笔)', minInterval: 1, axisLabel: { fontSize: 11 }, splitLine: { show: false } }
+            ],
+            series: [
+                { name: '剩余买入金额', type: 'bar', itemStyle: { color: '#4a90d9' }, data: months.map(m => m.buyAmt) },
+                { name: '剩余卖出金额', type: 'bar', itemStyle: { color: '#e08b3c' }, data: months.map(m => m.sellAmt) },
+                { name: '未配对条目数', type: 'line', yAxisIndex: 1, smooth: true, symbol: 'circle', symbolSize: 7,
+                  lineStyle: { width: 2 }, itemStyle: { color: '#2f80ed' }, data: months.map(m => m.count) }
+            ]
+        });
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function render() {
     disposeAll(); renderBreadcrumb();
