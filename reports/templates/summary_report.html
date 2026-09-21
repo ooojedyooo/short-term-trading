@@ -160,12 +160,14 @@ body {
     .cross-inner-table th { background: #f0f4ff; color: #555; font-size: 11px; }
     .cross-inner-table th:first-child, .cross-inner-table td:first-child { text-align: left; }
     /* 未配对持仓：按方向区分行底色（蓝 = 买入未平仓 / 橙 = 卖出未平仓） */
-    .unmatched-table tbody tr.uw-row-buy { background: #f2f8ff; }
-    .unmatched-table tbody tr.uw-row-buy:hover { background: #e4f0ff; }
-    .unmatched-table tbody tr.uw-row-sell { background: #fff8f0; }
-    .unmatched-table tbody tr.uw-row-sell:hover { background: #fff0e0; }
-    .unmatched-table .uw-code { color: #aaa; font-size: 11px; }
-    .unmatched-table .uw-note { text-align: left; color: #888; font-size: 12px; }
+    .unmatched-table tbody tr.uw-row-buy { background: #d3e6fb; }
+    .unmatched-table tbody tr.uw-row-buy:hover { background: #bcd8f8; }
+    .unmatched-table tbody tr.uw-row-sell { background: #fcdfba; }
+    .unmatched-table tbody tr.uw-row-sell:hover { background: #f8d0a1; }
+    .unmatched-table .uw-code { color: #8a9099; font-size: 11px; }
+    .unmatched-table .uw-note { text-align: left; color: #666; font-size: 12px; }
+    /* 底色加深后，原来的浅灰分隔线会糊掉，单独调深 */
+    .unmatched-table th, .unmatched-table td { border-bottom: 1px solid rgba(0,0,0,0.09); }
     .uw-legend { display: inline-flex; gap: 20px; align-items: center; font-size: 12px; color: #888; }
     .uw-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 </style>
@@ -1351,8 +1353,8 @@ function renderUnmatched() {
     } else {
         html += '<h3 style="font-size:16px;color:#2c3e50;margin:24px 0 8px;border-left:4px solid #2f80ed;padding-left:10px;">🗓 按月分组 · 月度未配对明细</h3>';
         html += '<p style="margin:0 0 12px;"><span class="uw-legend">'
-              + '<span><i style="background:#f2f8ff;border:1px solid #cfe3fb;"></i>买入未平仓（买了还没卖）</span>'
-              + '<span><i style="background:#fff8f0;border:1px solid #f3dcc0;"></i>卖出未平仓（卖了但无对应买入）</span>'
+              + '<span><i style="background:#d3e6fb;border:1px solid #a9cbf0;"></i>买入未平仓（买了还没卖）</span>'
+              + '<span><i style="background:#fcdfba;border:1px solid #efc48c;"></i>卖出未平仓（卖了但无对应买入）</span>'
               + '</span></p>';
         months.forEach(m => {
             html += '<div style="margin-bottom:16px;padding:14px 16px;background:#fff;border:1px solid #eee;border-radius:10px;">';
