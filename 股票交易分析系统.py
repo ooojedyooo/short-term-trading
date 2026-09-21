@@ -1721,13 +1721,20 @@ def compute_unmatched_detail():
         def pack(items):
             out = []
             for r in items:
+                bq = int(r.get('remain_buy', 0))
+                ba = round(float(r.get('remain_buy_amt', 0) or 0), 2)
+                sq = int(r.get('remain_sell', 0))
+                sa = round(float(r.get('remain_sell_amt', 0) or 0), 2)
                 out.append({
                     'code': norm_code(r['code']),
                     'name': str(r['name']),
-                    'buyQty': int(r.get('remain_buy', 0)),
-                    'buyAmt': round(float(r.get('remain_buy_amt', 0) or 0), 2),
-                    'sellQty': int(r.get('remain_sell', 0)),
-                    'sellAmt': round(float(r.get('remain_sell_amt', 0) or 0), 2),
+                    'buyQty': bq,
+                    'buyAmt': ba,
+                    # 未配对均价：用展示金额/数量算，保证用户手工验算能对上
+                    'buyAvg': round(ba / bq, 3) if bq else 0,
+                    'sellQty': sq,
+                    'sellAmt': sa,
+                    'sellAvg': round(sa / sq, 3) if sq else 0,
                     'note': str(r.get('note', '')),
                 })
             # 金额大的排前面，一眼看到主要占用

@@ -159,6 +159,15 @@ body {
     .cross-inner-table th, .cross-inner-table td { padding: 6px 10px; text-align: right; border-bottom: 1px solid #eee; }
     .cross-inner-table th { background: #f0f4ff; color: #555; font-size: 11px; }
     .cross-inner-table th:first-child, .cross-inner-table td:first-child { text-align: left; }
+    /* 未配对持仓：按方向区分行底色（蓝 = 买入未平仓 / 橙 = 卖出未平仓） */
+    .unmatched-table tbody tr.uw-row-buy { background: #f2f8ff; }
+    .unmatched-table tbody tr.uw-row-buy:hover { background: #e4f0ff; }
+    .unmatched-table tbody tr.uw-row-sell { background: #fff8f0; }
+    .unmatched-table tbody tr.uw-row-sell:hover { background: #fff0e0; }
+    .unmatched-table .uw-code { color: #aaa; font-size: 11px; }
+    .unmatched-table .uw-note { text-align: left; color: #888; font-size: 12px; }
+    .uw-legend { display: inline-flex; gap: 20px; align-items: center; font-size: 12px; color: #888; }
+    .uw-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 </style>
 </head>
 <body>
@@ -1271,19 +1280,25 @@ function renderYearlyCross() {
 }
 /* ====== 未配对持仓（月度分组 + 全年匹配后剩余） ====== */
 function unmatchedTable(items) {
-    let h = '<table class="cross-table" style="margin-bottom:0;"><thead><tr>'
-          + '<th>股票</th><th>剩余买入量</th><th>买入金额</th><th>剩余卖出量</th><th>卖出金额</th><th>说明</th>'
+    let h = '<table class="cross-table unmatched-table" style="margin-bottom:0;"><thead><tr>'
+          + '<th>股票</th>'
+          + '<th>剩余买入量</th><th>买入均价</th><th>买入金额</th>'
+          + '<th>剩余卖出量</th><th>卖出均价</th><th>卖出金额</th>'
+          + '<th>说明</th>'
           + '</tr></thead><tbody>';
     items.forEach(it => {
+        // 一条未配对记录必然只有一边有剩余（配平后只可能剩买或剩卖），据此上底色
+        const isBuy = it.buyQty > 0;
+        const cls = isBuy ? 'uw-row-buy' : 'uw-row-sell';
         const bq = it.buyQty ? it.buyQty.toLocaleString('zh-CN') : '—';
         const sq = it.sellQty ? it.sellQty.toLocaleString('zh-CN') : '—';
-        h += '<tr style="cursor:pointer;" onclick="switchTab(\'overview\'); setTimeout(()=>drillTo(\'stock\',\'' + it.name + '\'),100);">';
-        h += '<td><b>' + it.name + '</b> <span style="color:#aaa;font-size:11px;">' + it.code + '</span></td>';
-        h += '<td>' + bq + '</td>';
-        h += '<td>' + (it.buyAmt ? fmtMoney(it.buyAmt) : '—') + '</td>';
-        h += '<td>' + sq + '</td>';
-        h += '<td>' + (it.sellAmt ? fmtMoney(it.sellAmt) : '—') + '</td>';
-        h += '<td style="text-align:left;color:#888;font-size:12px;">' + (it.note || '') + '</td>';
+        const bavg = it.buyQty ? '¥' + Number(it.buyAvg).toFixed(3) : '—';
+        const savg = it.sellQty ? '¥' + Number(it.sellAvg).toFixed(3) : '—';
+        h += '<tr class="' + cls + '" style="cursor:pointer;" onclick="switchTab(\'overview\'); setTimeout(()=>drillTo(\'stock\',\'' + it.name + '\'),100);">';
+        h += '<td><b>' + it.name + '</b> <span class="uw-code">' + it.code + '</span></td>';
+        h += '<td>' + bq + '</td><td>' + bavg + '</td><td>' + (it.buyAmt ? fmtMoney(it.buyAmt) : '—') + '</td>';
+        h += '<td>' + sq + '</td><td>' + savg + '</td><td>' + (it.sellAmt ? fmtMoney(it.sellAmt) : '—') + '</td>';
+        h += '<td class="uw-note">' + (it.note || '') + '</td>';
         h += '</tr>';
     });
     h += '</tbody></table>';
@@ -1334,7 +1349,11 @@ function renderUnmatched() {
     if (months.length === 0) {
         html += '<div class="empty-state">各月买卖均已配对，无未配对记录 🎉</div>';
     } else {
-        html += '<h3 style="font-size:16px;color:#2c3e50;margin:24px 0 12px;border-left:4px solid #2f80ed;padding-left:10px;">🗓 按月分组 · 月度未配对明细</h3>';
+        html += '<h3 style="font-size:16px;color:#2c3e50;margin:24px 0 8px;border-left:4px solid #2f80ed;padding-left:10px;">🗓 按月分组 · 月度未配对明细</h3>';
+        html += '<p style="margin:0 0 12px;"><span class="uw-legend">'
+              + '<span><i style="background:#f2f8ff;border:1px solid #cfe3fb;"></i>买入未平仓（买了还没卖）</span>'
+              + '<span><i style="background:#fff8f0;border:1px solid #f3dcc0;"></i>卖出未平仓（卖了但无对应买入）</span>'
+              + '</span></p>';
         months.forEach(m => {
             html += '<div style="margin-bottom:16px;padding:14px 16px;background:#fff;border:1px solid #eee;border-radius:10px;">';
             html += '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:10px;">';
