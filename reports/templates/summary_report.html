@@ -1282,13 +1282,22 @@ function renderYearlyCross() {
 }
 /* ====== 未配对持仓（月度分组 + 全年匹配后剩余） ====== */
 function unmatchedTable(items) {
+    // 组内排序：① 买入未平仓整组在前、卖出未平仓整组在后（与底色/图例一致）
+    //          ② 同方向内按剩余股数从大到小（剩余量大的排前面，一眼看到主要占用）
+    const rows = items.slice().sort((a, b) => {
+        const ga = a.buyQty > 0 ? 0 : 1, gb = b.buyQty > 0 ? 0 : 1;
+        if (ga !== gb) return ga - gb;
+        const qa = a.buyQty > 0 ? a.buyQty : a.sellQty;
+        const qb = b.buyQty > 0 ? b.buyQty : b.sellQty;
+        return qb - qa;
+    });
     let h = '<table class="cross-table unmatched-table" style="margin-bottom:0;"><thead><tr>'
           + '<th>股票</th>'
           + '<th>剩余买入量</th><th>买入均价</th><th>买入金额</th>'
           + '<th>剩余卖出量</th><th>卖出均价</th><th>卖出金额</th>'
           + '<th>说明</th>'
           + '</tr></thead><tbody>';
-    items.forEach(it => {
+    rows.forEach(it => {
         // 一条未配对记录必然只有一边有剩余（配平后只可能剩买或剩卖），据此上底色
         const isBuy = it.buyQty > 0;
         const cls = isBuy ? 'uw-row-buy' : 'uw-row-sell';
@@ -1314,7 +1323,8 @@ function renderUnmatched() {
         return;
     }
     const allMonths = U.months || [];
-    const months = allMonths.filter(m => m.count > 0);
+    const months = allMonths.filter(m => m.count > 0);        // 时间正序：供趋势图用
+    const monthsDesc = months.slice().reverse();              // 近月在前：供按月分组明细块用
     const yr = U.year || { items: [], count: 0, buyQty: 0, buyAmt: 0, sellQty: 0, sellAmt: 0, year: '' };
     const monthItems = allMonths.reduce((s, m) => s + m.count, 0);
 
@@ -1351,12 +1361,12 @@ function renderUnmatched() {
     if (months.length === 0) {
         html += '<div class="empty-state">各月买卖均已配对，无未配对记录 🎉</div>';
     } else {
-        html += '<h3 style="font-size:16px;color:#2c3e50;margin:24px 0 8px;border-left:4px solid #2f80ed;padding-left:10px;">🗓 按月分组 · 月度未配对明细</h3>';
+        html += '<h3 style="font-size:16px;color:#2c3e50;margin:24px 0 8px;border-left:4px solid #2f80ed;padding-left:10px;">🗓 按月分组 · 月度未配对明细 <span style="font-size:12px;color:#999;font-weight:normal;">（近月在前 · 组内买入在前、按剩余量倒序）</span></h3>';
         html += '<p style="margin:0 0 12px;"><span class="uw-legend">'
               + '<span><i style="background:#d3e6fb;border:1px solid #a9cbf0;"></i>买入未平仓（买了还没卖）</span>'
               + '<span><i style="background:#fcdfba;border:1px solid #efc48c;"></i>卖出未平仓（卖了但无对应买入）</span>'
               + '</span></p>';
-        months.forEach(m => {
+        monthsDesc.forEach(m => {
             html += '<div style="margin-bottom:16px;padding:14px 16px;background:#fff;border:1px solid #eee;border-radius:10px;">';
             html += '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:10px;">';
             html += '<h4 style="font-size:15px;margin:0;color:#2c3e50;">' + m.ym + '<span style="font-size:12px;color:#999;font-weight:normal;margin-left:8px;">' + m.count + ' 笔未配对</span></h4>';

@@ -1737,8 +1737,10 @@ def compute_unmatched_detail():
                     'sellAvg': round(sa / sq, 3) if sq else 0,
                     'note': str(r.get('note', '')),
                 })
-            # 金额大的排前面，一眼看到主要占用
-            out.sort(key=lambda x: -(x['buyAmt'] + x['sellAmt']))
+            # 展示顺序兜底：买入未平仓整组在前、卖出整组在后；同组内按剩余股数从大到小
+            # （模板 unmatchedTable() 渲染时会再排一次，两处规则刻意保持一致）
+            out.sort(key=lambda x: (0 if x['buyQty'] > 0 else 1,
+                                    -(x['buyQty'] if x['buyQty'] > 0 else x['sellQty'])))
             return {
                 'items': out,
                 'count': len(out),
@@ -1748,6 +1750,7 @@ def compute_unmatched_detail():
                 'sellAmt': round(sum(x['sellAmt'] for x in out), 2),
             }
 
+        # 月份保持时间正序（趋势图需要）；「未配对」tab 的明细块在模板里 reverse 成近月在前
         months = []
         for ym in sorted(df['ym'].unique()):
             p = pack(kt.analyze(df[df['ym'] == ym])['remain'])
