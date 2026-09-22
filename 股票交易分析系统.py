@@ -834,6 +834,28 @@ def norm_code(c):
     return s
 
 
+def allows_odd_lot(code):
+    """该证券是否允许出现「非 100 整数倍」的合法股数（零股递增板块）。
+
+    ⚠ 为什么要这个判定（2026-09-22 用户确认）：
+      科创板挂单 200 股只成交了 161 股、剩余撤单 —— 这是**部分成交**，161 是券商导出的
+      真实成交股数，完全合法。若把这类数字当 OCR 误读去"修正"（比如补成 200），
+      会把真实持仓改错，并连带污染下游按股数匹配的跨天配对盈亏。
+
+    各板块申报规则：
+      - 主板（600/601/603/605/000/001/002/003…）：100 股整数倍 → 非整数倍基本就是读错
+      - 创业板 300/301：100 股起，超出部分 1 股递增
+      - 科创板 688/689：200 股起，超出部分 1 股递增
+      - 北交所/新三板 4xx / 8xx / 920：100 股起，超出部分 1 股递增
+    后三类 + 逐笔撮合 → 部分成交天然会产生零股，提示它们属于误报。
+    """
+    c = norm_code(code)
+    if c.startswith(('688', '689', '300', '301', '920')):
+        return True
+    # 4xx / 8xx = 北交所 / 新三板（主板不会以 4 或 8 开头）
+    return c[:1] in ('4', '8')
+
+
 def parse_liangrong_excel(file_path):
     """解析两融账户（券商）导出的当日成交汇总 Excel —— 按列名动态识别，不写死行号列号
 
@@ -994,9 +1016,13 @@ def validate_trades(df, source_tag=''):
             if abs(expected - amount) / max(amount, 1) > 0.05:
                 warnings.append(f"  [告警] {name}({code}) {direction} 金额={amount} 但 数量×价格={expected:.2f}，偏差>5%")
 
-        # 5. 数量非100整数倍（A股主板100股/手，科创板200股起）
-        if qty > 0 and qty % 100 != 0:
-            warnings.append(f"  [提示] {name}({code}) {direction} 数量={qty} 非100整数倍（可能是科创板200股起 or OCR误读）")
+        # 5. 数量非100整数倍
+        #    主板：必须 100 股整数倍 → 非整数倍基本是 OCR 误读，保留提示
+        #    科创板/创业板/北交所：起步股数 + 超出部分 1 股递增，且逐笔撮合，
+        #    部分成交（如挂 200 股只成 161 股后撤单）会产生**合法零股** → 不再误报。
+        #    数量真读错的兜底由上面第 4 条「金额 ≈ 数量×价格 偏差>5%」承担。
+        if qty > 0 and qty % 100 != 0 and not allows_odd_lot(code):
+            warnings.append(f"  [提示] {name}({code}) {direction} 数量={qty} 非100整数倍（主板应为100股整数倍，疑似 OCR 误读）")
 
     if warnings:
         prefix = f"[{source_tag}] " if source_tag else ""
