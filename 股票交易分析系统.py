@@ -76,28 +76,52 @@ STAMP_DUTY_RATE = 0.0005      # 印花税费率：万五（0.05%），仅卖出�
 # ==================== 核心处理函数 ====================
 
 def extract_date_from_filename(filename):
-    """从文件名提取日期，支持 YYYY-MM-DD 和 YYYYMMDD 格式"""
-    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
-    if date_match:
-        return date_match.group(1)
-    date_match = re.search(r'(\d{4})(\d{2})(\d{2})', filename)
-    if date_match:
-        return f"{date_match.group(1)}-{date_match.group(2)}-{date_match.group(3)}"
-    return datetime.now().strftime('%Y-%m-%d')
+    """从文件名提取日期，支持 YYYY-MM-DD 和 YYYYMMDD 格式。
+
+    ⚠ 未来日期守卫（2026-09-23 加）：
+      文件名里的日期若**晚于今天**，说明是手滑/模板残留（未来不可能有成交），
+      忽略它并回退到当天日期，同时打印醒目警告。
+      不挡的话，同一天的三个渠道文件会因为日期不一致被**拆成两组**：
+      既不跨账户合并匹配，又会在汇总表里凭空多出一个未来交易日（按日期整日替换）。
+    """
+    today = datetime.now().strftime('%Y-%m-%d')
+    cand = None
+    m = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+    if m:
+        cand = m.group(1)
+    else:
+        m = re.search(r'(\d{4})(\d{2})(\d{2})', filename)
+        if m:
+            cand = '{}-{}-{}'.format(m.group(1), m.group(2), m.group(3))
+    if cand is None:
+        return today
+    if cand > today:   # ISO 日期字符串可直接比较
+        print("  [警告] 文件名日期 %s 晚于今天 %s（未来不可能有成交）→ 按笔误处理，改用 %s"
+              % (cand, today, today))
+        print("         文件：%s（如确实要按该日期入账，请先改正文件名）" % os.path.basename(filename))
+        return today
+    return cand
 
 
 def get_source_from_filename(filename):
-    """从文件名判断数据来源"""
-    fname_lower = filename.lower()
-    if fname_lower.endswith('.xlsx'):
+    """从文件名判断数据来源（渠道名由用户在文件名里标明）。
+
+    ⚠ 2026-09-23 终端更换后：三个渠道导出的**都是 .xls**（实为 GBK 制表符文本 TSV），
+      所以**不能再靠扩展名区分**，必须优先认文件名里的渠道关键词，
+      否则「20260923_手机.xls」会被误判成两融账户 → 来源标签错、手机仓被算进两融。
+      扩展名只作为「文件名里没写渠道」时的兜底（兼容旧命名）。
+    """
+    fname = filename.lower()
+    if '平安' in fname:
+        return '平安账户'
+    if '手机' in fname:
+        return '手机账户'
+    if '两融' in fname:
         return '两融账户'
-    elif fname_lower.endswith('.xls'):
-        if '平安' in fname_lower:
-            return '平安账户'
+    # ---- 无渠道关键词：退回旧的按扩展名判断 ----
+    if fname.endswith('.xlsx') or fname.endswith('.xls'):
         return '两融账户'
-    elif any(fname_lower.endswith(ext) for ext in ['.png', '.jpg', '.jpeg']):
-        if '平安' in fname_lower:
-            return '平安账户'
+    if any(fname.endswith(ext) for ext in ['.png', '.jpg', '.jpeg']):
         return '手机账户'
     return '未知'
 
@@ -749,23 +773,47 @@ def parse_pingan_image_trades(image_path):
 
 # ==================== Excel处理 ====================
 
+def _read_table_any(file_path, header=0):
+    """统一读取「成交明细表」文件，兼容真 Excel 与伪装的文本 TSV。
+
+    ⚠ 为什么要它（2026-09-23 用户换导出终端后）：
+      不同终端导出的文件**扩展名一样、内里完全不同**：
+        · 真 Excel：.xlsx（zip 魔数 `PK\\x03\\x04`）或老 .xls（OLE 魔数 `D0CF11E0`）
+        · 伪装文本：扩展名写成 .xls，实际是 **GBK 编码的制表符文本（TSV）**
+      只用 pd.read_excel 读后者会直接报错；只用 read_csv 读真 Excel 也会挂。
+      → 按**文件头魔数**判断，而不是按扩展名，这样新旧格式都能吃。
+    """
+    with open(file_path, 'rb') as fh:
+        magic = fh.read(8)
+    is_xlsx = magic[:4] == b'PK\x03\x04'
+    is_xls = magic[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
+    if is_xlsx or is_xls:
+        return pd.read_excel(file_path, header=header, dtype=object)
+    # 文本 TSV：GBK 优先（券商常见），逐级退回
+    last_err = None
+    for enc in ('gbk', 'gb18030', 'utf-8-sig', 'utf-8'):
+        try:
+            return pd.read_csv(file_path, sep='\t', encoding=enc, header=header,
+                               dtype=str, skip_blank_lines=True)
+        except Exception as e:
+            last_err = e
+    raise ValueError('无法解析（既非 xls/xlsx 魔数，也不是可解码的 TSV）：%s / %s'
+                     % (file_path, last_err))
+
+
 def parse_pingan_excel(file_path):
     """解析平安证券导出的成交记录
     平安导出文件特点：
-    - 文件名含"平安"，扩展名可能是 .xls 但实际上可能是 TSV 格式（GBK编码）
-    - 也可能是真正的 .xls 老格式
+    - 文件名含"平安"，扩展名可能是 .xls 但实际是 TSV 格式（GBK编码），也可能是真 .xls
+      （读取统一交给 `_read_table_any`，不再靠扩展名猜）
     - 第一行为列名，数据从第二行开始
     - 列：成交时间 | 证券代码 | 证券名称 | 操作 | 成交数量 | 成交均价 | 成交金额 | ...
     - 证券代码用格式：="688778"（需要剥离）
     - 操作用"买入"/"卖出"（需映射为标准格式）
+    - ⚠ 2026-09-23 新格式：列名不变（仍是「操作」），但取值可能是「证券买入/证券卖出」
+      → 用 `'买' in x` / `'卖' in x` 归并，三种写法都吃得下
     """
-    # 先尝试作为TSV读取（GBK编码，平安常见导出格式）
-    try:
-        raw_df = pd.read_csv(file_path, sep='\t', encoding='gbk', dtype=str)
-    except Exception:
-        # 回退到xlrd引擎读真正的.xls
-        engine = 'xlrd' if file_path.lower().endswith('.xls') else None
-        raw_df = pd.read_excel(file_path, engine=engine)
+    raw_df = _read_table_any(file_path, header=0)
 
     # 只取需要的列，映射到标准字段名
     col_map = {
@@ -873,9 +921,19 @@ def parse_liangrong_excel(file_path):
         * 末尾新增「合计」行
       改为按列名取列后，上述变化全部免疫；未知新增列自动丢弃。
 
+    ⚠ 历史坑（2026-09-23 用户换导出终端）：
+      * 扩展名 .xlsx → **.xls**，且文件**不是真 Excel**，是 GBK 制表符文本（TSV）
+      * 列名「买卖类别」→「操作」
+      * 取值「限价买入/卖出」→「担保品买入/担保品卖出」
+      * 多出「成交日期 / 交易市场 / 市场代码」等列（自动丢弃）
+      * 「成交时间」整列为空 → 交易日期只能从**文件名**取
+      应对：① 读取统一走 `_read_table_any`（按文件头魔数判真 Excel / 伪 TSV，两种都能吃）；
+            ② 列名别名加「操作」；③ 买卖类别归一化按「买/卖」二字兼容全部历史写法。
+      ⚠ 旧格式（.xlsx + 买卖类别列）必须继续可用——用户可能两个终端换着用。
+
     返回：规范化列 ['证券代码','证券名称','买卖类别','成交类型','成交数量','成交价格','成交金额']
     """
-    raw = pd.read_excel(file_path, header=None, dtype=object)
+    raw = _read_table_any(file_path, header=None)
 
     # 1) 动态定位表头行（含「证券代码」的那一行），不用写死 skiprows
     header_idx = None
@@ -891,8 +949,11 @@ def parse_liangrong_excel(file_path):
     body.columns = range(len(header))
 
     # 2) 按列名映射取列，多余列（如「市场」）直接丢弃；兼容新旧价格列名
+    #    ⚠ 「操作」是 2026-09-23 新终端（及其他渠道）的买卖类别列名，必须映射到「买卖类别」，
+    #      否则 need 校验直接 ValueError（若被静默跳过，下游按「证券买入」精确匹配会一笔都认不出）
     alias = {
         '证券代码': '证券代码', '证券名称': '证券名称', '买卖类别': '买卖类别',
+        '操作': '买卖类别',
         '成交类型': '成交类型', '成交数量': '成交数量', '成交金额': '成交金额',
         '成交均价': '成交价格', '成交价格': '成交价格',
     }
@@ -931,7 +992,10 @@ def parse_liangrong_excel(file_path):
         print('  [两融解析] 已忽略 %d 行非交易数据（合计/空行/表头）' % dropped)
 
     # 5) 归一化买卖类别 —— 下游全部按「证券买入/证券卖出」精确匹配
-    #    ⚠ 券商新版导出为「限价买入/限价卖出」（旧版为「证券买入/证券卖出」），不归一化会一笔都认不出
+    #    ⚠ 历年出现过的取值（不归一化就会「一笔都认不出」，不是崩溃，更危险）：
+    #        证券买入/证券卖出（旧）→ 限价买入/限价卖出（2026-09-15 升级）
+    #        → 担保品买入/担保品卖出（2026-09-23 两融新终端）
+    #    统一规则：含「买」= 买入、含「卖」= 卖出，三种写法全覆盖
     df['买卖类别'] = df['买卖类别'].apply(
         lambda x: '证券买入' if '买' in str(x) else ('证券卖出' if '卖' in str(x) else str(x))
     )

@@ -482,6 +482,16 @@ def resolved_year(arg):
 
 
 def main():
+    # ⚠ 修复 Windows GBK 控制台无法输出 '↳' (U+21B3) 等字符导致 UnicodeEncodeError 崩溃
+    #   （2026-09-23 实际踩到：明细行打印到一半崩掉，导致末尾的「剩余持仓导出」被跳过）
+    #   主程序早有这层保护，跨天脚本漏了，这里补齐。
+    try:
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
     ap = argparse.ArgumentParser(description='月度/年度跨天配对分析')
     ap.add_argument('--month', nargs='?', const='AUTO', default=None,
                     help='算上月(--month)或指定月(--month YYYY-MM)')
