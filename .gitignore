@@ -9,6 +9,9 @@ __pycache__/
 ~$*.xlsx
 ~$*.xls
 
+# 汇总表改前的本地回滚备份（保持 . 开头，find_input_files 也会跳过）
+.backup_*.xlsx
+
 # IDE
 .vscode/
 .idea/

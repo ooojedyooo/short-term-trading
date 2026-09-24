@@ -1208,8 +1208,13 @@ def calculate_profits(df, buy_records, sell_records, trading_date, source):
             '数据来源': display_source,
             '证券代码': norm_code(stock_code),
             '证券名称': stock_name,
-            '买入数量': int(total_buy_qty),
-            '卖出数量': int(total_sell_qty),
+            # ⚠ 口径统一（2026-09-24 修正）：本行代表「已配对的那一批」，
+            #   数量与金额必须同口径，否则 数量×均价 ≠ 金额。
+            #   原来 买入数量=全量(total_buy_qty) 而 买入金额=配对部分 → 自相矛盾
+            #   （海光 400 vs 49,747，均价被算成 124.37），且 Excel 里 SUM(买入数量) 会重复计算。
+            #   改为「配对数量 + 配对金额」后：匹配行 + 未平仓行 求和 = 当日真实总量。
+            '买入数量': int(matched_qty),
+            '卖出数量': int(matched_qty),
             '匹配数量': int(matched_qty),
             '买入均价': round(avg_buy_price, 4),
             '卖出均价': round(avg_sell_price, 4),
@@ -1224,8 +1229,9 @@ def calculate_profits(df, buy_records, sell_records, trading_date, source):
         })
 
         print(f"股票：{stock_name} ({stock_code})" + (f" [跨账户]" if len(involved_sources) > 1 else ""))
-        print(f"  买入：数量={total_buy_qty:.0f}, 均价={avg_buy_price:.4f}, 金额={matched_buy_amt:.2f}")
-        print(f"  卖出：数量={total_sell_qty:.0f}, 均价={avg_sell_price:.4f}, 金额={matched_sell_amt:.2f}")
+        print(f"  当日买入 {total_buy_qty:.0f} 股 / 卖出 {total_sell_qty:.0f} 股，配对 {matched_qty:.0f} 股")
+        print(f"  配对买入：数量={matched_qty:.0f}, 均价={avg_buy_price:.4f}, 金额={matched_buy_amt:.2f}")
+        print(f"  配对卖出：数量={matched_qty:.0f}, 均价={avg_sell_price:.4f}, 金额={matched_sell_amt:.2f}")
         print(f"  毛盈亏：{profit:.2f} 元")
         print(f"  交易成本：佣金={commission:.2f}, 印花税={stamp_duty:.2f}, 合计={total_cost:.2f}")
         print(f"  净盈亏：{net_profit:.2f} 元 ({profit_pct:.2f}%)")
